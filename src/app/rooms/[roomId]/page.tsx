@@ -1,10 +1,8 @@
 import { notFound } from "next/navigation";
 import { AuctionDashboard } from "@/components/AuctionDashboard";
-import { getRoomAuctionData, getStaticRoomParams } from "@/lib/auction-data";
+import { getRoomAuctionData } from "@/lib/auction-data";
 
-export function generateStaticParams() {
-  return getStaticRoomParams();
-}
+export const dynamic = "force-dynamic";
 
 export default async function RoomPage({
   params,

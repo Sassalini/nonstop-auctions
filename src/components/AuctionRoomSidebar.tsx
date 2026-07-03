@@ -1,5 +1,5 @@
 import { AuctionRoomCard } from "@/components/AuctionRoomCard";
-import { getLotById, type AuctionRoom } from "@/lib/auction-data";
+import type { AuctionRoom } from "@/lib/auction-data";
 
 type AuctionRoomSidebarProps = {
   rooms: AuctionRoom[];
@@ -25,7 +25,7 @@ export function AuctionRoomSidebar({
           <AuctionRoomCard
             key={room.id}
             room={room}
-            liveLot={getLotById(room.liveLotId)}
+            liveLot={room.liveLot}
             isActive={activeRoomId === room.id}
           />
         ))}

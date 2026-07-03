@@ -40,7 +40,13 @@ export function BidPanel({ lot }: BidPanelProps) {
         </div>
 
         <div className="border-t border-white/10 pt-4 sm:border-l sm:border-t-0 sm:pl-4 lg:border-l-0 lg:border-t lg:pl-0 2xl:border-l 2xl:border-t-0 2xl:pl-4">
-          <BidForm currentBid={lot.currentBid} minimumIncrement={lot.minimumIncrement} />
+          <BidForm
+            lotId={lot.id}
+            currentBid={lot.currentBid}
+            minimumIncrement={lot.minimumIncrement}
+            auctionStatus={lot.auctionStatus}
+            endsAt={lot.endsAt}
+          />
         </div>
       </div>
     </section>

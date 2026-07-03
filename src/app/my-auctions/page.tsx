@@ -5,6 +5,8 @@ import { InteriorShell } from "@/components/InteriorShell";
 import { formatCurrency, formatEstimate } from "@/lib/format";
 import { listLots } from "@/lib/auction-data";
 
+export const dynamic = "force-dynamic";
+
 export default async function MyAuctionsPage() {
   const watchedLots = (await listLots()).slice(0, 5);
 

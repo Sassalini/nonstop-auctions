@@ -1,10 +1,8 @@
 import { notFound } from "next/navigation";
 import { AuctionDashboard } from "@/components/AuctionDashboard";
-import { getLotAuctionData, getStaticLotParams } from "@/lib/auction-data";
+import { getLotAuctionData } from "@/lib/auction-data";
 
-export function generateStaticParams() {
-  return getStaticLotParams();
-}
+export const dynamic = "force-dynamic";
 
 export default async function LotPage({
   params,
