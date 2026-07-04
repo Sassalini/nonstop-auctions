@@ -3,6 +3,7 @@ node_modules
 
 # next.js
 .next
+.open-next
 out
 *.tsbuildinfo
 
@@ -22,6 +23,13 @@ pnpm-debug.log*
 # local env files
 .env*.local
 .env
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+
+# cloudflare
+.wrangler
+cloudflare-env.d.ts
 
 # local package cache
 .npm-cache

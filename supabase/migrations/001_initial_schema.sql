@@ -122,6 +122,25 @@ before update on public.lots
 for each row
 execute function public.prevent_direct_lot_bid_state_update();
 
+create or replace function public.prevent_direct_bid_insert()
+returns trigger
+language plpgsql
+as $$
+begin
+  if current_setting('app.place_bid', true) = 'true' then
+    return new;
+  end if;
+
+  raise exception 'Bids must be placed through the secure place_bid function.';
+end;
+$$;
+
+drop trigger if exists prevent_direct_bid_insert on public.bids;
+create trigger prevent_direct_bid_insert
+before insert on public.bids
+for each row
+execute function public.prevent_direct_bid_insert();
+
 alter table public.profiles enable row level security;
 alter table public.auction_rooms enable row level security;
 alter table public.lots enable row level security;
@@ -170,7 +189,15 @@ create policy "Sellers can create their own lots"
 on public.lots
 for insert
 to authenticated
-with check (seller_id = auth.uid());
+with check (
+  seller_id = auth.uid()
+  and status in ('DRAFT', 'WAITING')
+  and current_bid = 0
+  and highest_bidder_id is null
+  and winning_bid is null
+  and sold_at is null
+  and ends_at is null
+);
 
 drop policy if exists "Sellers can update draft or waiting lots" on public.lots;
 create policy "Sellers can update draft or waiting lots"
@@ -214,7 +241,8 @@ on public.bids
 for insert
 to authenticated
 with check (
-  bidder_id = auth.uid()
+  current_setting('app.place_bid', true) = 'true'
+  and bidder_id = auth.uid()
   and exists (
     select 1
     from public.lots
@@ -262,6 +290,10 @@ begin
     raise exception 'Authentication required to place a bid.';
   end if;
 
+  if $2 is null or $2 <= 0 then
+    raise exception 'Bid amount must be greater than zero.';
+  end if;
+
   select *
   into existing_lot
   from public.lots
@@ -286,10 +318,10 @@ begin
     raise exception 'Bid must be at least %.', required_bid;
   end if;
 
+  perform set_config('app.place_bid', 'true', true);
+
   insert into public.bids (lot_id, bidder_id, amount)
   values ($1, bidder, $2);
-
-  perform set_config('app.place_bid', 'true', true);
 
   update public.lots
   set
