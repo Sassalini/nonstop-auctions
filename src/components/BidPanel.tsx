@@ -10,36 +10,40 @@ type BidPanelProps = {
 export function BidPanel({ lot }: BidPanelProps) {
   return (
     <section className="rounded-lg border border-auction-gold/20 bg-auction-panel/90 p-4 shadow-glow">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1 2xl:grid-cols-2">
-        <div className="space-y-4">
-          <div>
-            <p className="text-xs uppercase tracking-[0.18em] text-auction-muted">Current Bid</p>
-            <p className="mt-2 text-3xl font-semibold text-auction-ivory">
-              {formatCurrency(lot.currentBid)}
-            </p>
-            <p className="mt-2 text-sm text-auction-muted">
-              Next estimate: {formatEstimate(lot.estimateLow, lot.estimateHigh)}
-            </p>
-          </div>
+      <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(10rem,0.8fr)_minmax(14rem,1.05fr)] lg:grid-cols-1 xl:grid-cols-[minmax(7.125rem,0.8fr)_minmax(8.875rem,1fr)_minmax(8.75rem,1fr)]">
+        <div className="min-w-0">
+          <p className="whitespace-nowrap text-xs uppercase tracking-[0.18em] text-auction-muted">
+            Current Bid
+          </p>
+          <p className="mt-2 text-2xl font-semibold text-auction-ivory sm:text-3xl xl:text-2xl 2xl:text-[1.7rem]">
+            {formatCurrency(lot.currentBid)}
+          </p>
+          <p className="mt-2 text-sm leading-5 text-auction-muted">
+            Next estimate: {formatEstimate(lot.estimateLow, lot.estimateHigh)}
+          </p>
+        </div>
 
-          <div className="grid grid-cols-2 gap-3 border-t border-white/10 pt-4">
-            <div>
-              <p className="text-xs uppercase tracking-[0.18em] text-auction-muted">
-                Time Remaining
-              </p>
-              <div className="mt-2">
-                <CountdownTimer initialSeconds={lot.countdownSeconds} />
-              </div>
+        <div className="min-w-0 space-y-4 border-t border-white/10 pt-4 md:border-l md:border-t-0 md:pl-4 md:pt-0 lg:border-l-0 lg:border-t lg:pl-0 lg:pt-4 xl:border-l xl:border-t-0 xl:pl-4 xl:pt-0">
+          <div className="min-w-[7.75rem]">
+            <p className="whitespace-nowrap text-xs uppercase tracking-[0.18em] text-auction-muted">
+              Time Remaining
+            </p>
+            <div className="mt-2">
+              <CountdownTimer initialSeconds={lot.countdownSeconds} />
             </div>
-            <div>
-              <p className="text-xs uppercase tracking-[0.18em] text-auction-muted">Activity</p>
-              <p className="mt-2 text-lg font-semibold text-auction-ivory">{lot.bidCount} bids</p>
-              <p className="text-sm text-auction-muted">{lot.watchers} watching</p>
-            </div>
+          </div>
+          <div>
+            <p className="whitespace-nowrap text-xs uppercase tracking-[0.18em] text-auction-muted">
+              Activity
+            </p>
+            <p className="mt-2 whitespace-nowrap text-lg font-semibold text-auction-ivory">
+              {lot.bidCount} bids
+            </p>
+            <p className="whitespace-nowrap text-sm text-auction-muted">{lot.watchers} watching</p>
           </div>
         </div>
 
-        <div className="border-t border-white/10 pt-4 sm:border-l sm:border-t-0 sm:pl-4 lg:border-l-0 lg:border-t lg:pl-0 2xl:border-l 2xl:border-t-0 2xl:pl-4">
+        <div className="min-w-0 border-t border-white/10 pt-4 md:border-l md:border-t-0 md:pl-4 md:pt-0 lg:border-l-0 lg:border-t lg:pl-0 lg:pt-4 xl:border-l xl:border-t-0 xl:pl-4 xl:pt-0">
           <BidForm
             lotId={lot.id}
             currentBid={lot.currentBid}

@@ -34,8 +34,8 @@ export function CountdownTimer({ initialSeconds, compact = false }: CountdownTim
     <span
       className={
         compact
-          ? "font-mono text-sm font-semibold text-auction-ember"
-          : "font-mono text-2xl font-semibold text-auction-danger sm:text-3xl"
+          ? "inline-block whitespace-nowrap font-mono text-sm font-semibold leading-none tabular-nums text-auction-ember"
+          : "inline-block min-w-[8.2ch] whitespace-nowrap font-mono text-[1.5rem] font-semibold leading-none tabular-nums text-auction-danger sm:text-[1.75rem] lg:text-[1.6rem] xl:text-[1.45rem] 2xl:text-[1.55rem]"
       }
     >
       {label}

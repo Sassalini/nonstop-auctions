@@ -30,9 +30,10 @@ export function AuctionRoomCard({
         alt=""
         fill
         sizes="(max-width: 1024px) 50vw, 300px"
-        className="absolute inset-0 h-full w-full object-cover opacity-45 transition duration-500 group-hover:scale-105 group-hover:opacity-55"
+        className="absolute inset-0 h-full w-full object-cover opacity-65 brightness-105 saturate-110 transition duration-700 group-hover:scale-105 group-hover:opacity-75 group-hover:brightness-110"
       />
-      <div className="media-shade absolute inset-0" />
+      <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/45 to-black/25" />
+      <div className="absolute inset-0 bg-gradient-to-b from-black/5 via-transparent to-black/65" />
       <div className="relative flex h-full min-h-[118px] flex-col justify-between">
         <div>
           <h3 className="font-serif text-xl text-auction-ivory">{room.name}</h3>
