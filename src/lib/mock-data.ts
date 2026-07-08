@@ -54,7 +54,7 @@ export const auctionRooms: AuctionRoom[] = [
     name: "The Jewellery Room",
     strapline: "Live auctions. Exceptional pieces.",
     category: "Fine Jewellery",
-    imageUrl: jewelleryImage,
+    imageUrl: ringImage,
     liveLotId: "lot-128",
     currentBid: 12500,
     bidCount: 23,

@@ -1,7 +1,6 @@
 import Link from "next/link";
 import {
   Bell,
-  Gavel,
   Menu,
   Search,
   Star,
@@ -14,16 +13,47 @@ const navItems = [
   { href: "/my-auctions", label: "My Auctions" },
 ];
 
+function AuctionLogoMark() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 32 32"
+      className="size-6"
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path
+        d="m10.8 13.2 5.8-5.8 5.2 5.2-5.8 5.8-5.2-5.2Z"
+        fill="currentColor"
+        fillOpacity="0.14"
+        strokeWidth="1.8"
+      />
+      <path d="m14.6 9.4-2.4-2.4" strokeWidth="1.8" />
+      <path d="m20.2 15 2.4 2.4" strokeWidth="1.8" />
+      <path d="m17.7 17 7.4 7.4" strokeWidth="2.2" />
+      <path
+        d="M7.2 22.6h15.6l1.8 3.6H5.4l1.8-3.6Z"
+        fill="currentColor"
+        fillOpacity="0.14"
+        strokeWidth="1.8"
+      />
+      <path d="M4.8 27.4h20.4" strokeWidth="1.8" />
+    </svg>
+  );
+}
+
 export function AppHeader() {
   return (
     <header className="sticky top-0 z-40 border-b border-auction-line/80 bg-auction-black/92 backdrop-blur-xl">
       <div className="mx-auto flex min-h-[74px] max-w-[1880px] items-center gap-3 px-4 sm:px-5 lg:px-7">
         <Link href="/" className="flex shrink-0 items-center gap-3 text-auction-ivory">
           <span className="flex size-10 items-center justify-center rounded-lg border border-auction-gold/30 bg-auction-panel text-auction-gold">
-            <Gavel size={22} strokeWidth={1.8} />
+            <AuctionLogoMark />
           </span>
           <span className="hidden text-sm font-semibold uppercase tracking-[0.18em] sm:block">
-            Nonstop Auctions
+            Non-Stop Auctions
           </span>
         </Link>
 
