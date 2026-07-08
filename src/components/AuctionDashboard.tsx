@@ -17,7 +17,7 @@ export function AuctionDashboard({
   upcomingLots,
 }: AuctionDashboardProps) {
   return (
-    <main className="mx-auto grid max-w-[1880px] grid-cols-1 gap-px bg-auction-line/70 lg:grid-cols-[280px_minmax(0,1fr)_320px] 2xl:grid-cols-[320px_minmax(0,1fr)_380px]">
+    <main className="mx-auto grid max-w-[1880px] grid-cols-1 gap-px bg-auction-line/45 lg:grid-cols-[280px_minmax(0,1fr)_320px] 2xl:grid-cols-[320px_minmax(0,1fr)_380px]">
       <div className="order-1 min-w-0 lg:order-2">
         <LiveLotPanel room={activeRoom} lot={currentLot} />
       </div>

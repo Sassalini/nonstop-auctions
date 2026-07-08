@@ -10,7 +10,7 @@ type UpcomingLotsSidebarProps = {
 
 export function UpcomingLotsSidebar({ lots, className = "" }: UpcomingLotsSidebarProps) {
   return (
-    <aside className={`bg-auction-ink p-4 lg:p-5 ${className}`}>
+    <aside className={`bg-auction-ink/90 p-4 backdrop-blur-sm lg:p-5 ${className}`}>
       <div className="mb-4 flex items-center justify-between gap-3">
         <h2 className="text-sm font-semibold text-auction-ivory">Up Next</h2>
         <button

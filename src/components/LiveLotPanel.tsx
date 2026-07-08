@@ -13,7 +13,7 @@ type LiveLotPanelProps = {
 
 export function LiveLotPanel({ room, lot }: LiveLotPanelProps) {
   return (
-    <section className="min-w-0 bg-auction-black p-4 lg:p-5">
+    <section className="min-w-0 bg-auction-black/90 p-4 backdrop-blur-sm lg:p-5">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2 text-sm text-auction-muted">
           <Link href={`/rooms/${room.id}`} className="truncate hover:text-auction-gold">

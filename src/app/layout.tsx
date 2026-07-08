@@ -15,8 +15,12 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <AppHeader />
-        {children}
+        <div aria-hidden="true" className="site-background" />
+        <div aria-hidden="true" className="site-background-overlay" />
+        <div className="relative z-10 min-h-screen">
+          <AppHeader />
+          {children}
+        </div>
       </body>
     </html>
   );

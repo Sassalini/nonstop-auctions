@@ -13,7 +13,7 @@ export function AuctionRoomSidebar({
   className = "",
 }: AuctionRoomSidebarProps) {
   return (
-    <aside className={`bg-auction-ink p-4 lg:p-5 ${className}`}>
+    <aside className={`bg-auction-ink/90 p-4 backdrop-blur-sm lg:p-5 ${className}`}>
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-xs font-semibold uppercase tracking-[0.22em] text-auction-gold">
           Auction Rooms
