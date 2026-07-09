@@ -2,6 +2,14 @@ import Image from "next/image";
 import Link from "next/link";
 import { AuctionStatusBadge } from "@/components/AuctionStatusBadge";
 import { CountdownTimer } from "@/components/CountdownTimer";
+import {
+  formatShortDateTime,
+  getLotBadgeVariant,
+  getLotCompactStatusLabel,
+  getLotStatusLabel,
+  getLotTimerLabel,
+  isTimedLifecycleStatus,
+} from "@/lib/auction-lifecycle";
 import { formatEstimate } from "@/lib/format";
 import type { Lot } from "@/lib/auction-data";
 
@@ -10,6 +18,14 @@ type UpcomingLotCardProps = {
 };
 
 export function UpcomingLotCard({ lot }: UpcomingLotCardProps) {
+  const statusLabel = getLotStatusLabel(lot.auctionStatus);
+  const timerLabel = getLotTimerLabel(lot.auctionStatus);
+  const showTimer = isTimedLifecycleStatus(lot.auctionStatus);
+  const unavailableUntil =
+    lot.auctionStatus === "UNSOLD" && lot.nextEligibleAt
+      ? formatShortDateTime(lot.nextEligibleAt)
+      : "";
+
   return (
     <Link
       href={`/lots/${lot.id}`}
@@ -27,15 +43,24 @@ export function UpcomingLotCard({ lot }: UpcomingLotCardProps) {
       <div className="min-w-0 py-1">
         <div className="flex items-center justify-between gap-2">
           <p className="text-sm font-semibold text-auction-ivory">Lot {lot.lotNumber}</p>
-          <AuctionStatusBadge status="upcoming" label="Next" />
+          <AuctionStatusBadge
+            status={getLotBadgeVariant(lot.auctionStatus)}
+            label={getLotCompactStatusLabel(lot.auctionStatus)}
+          />
         </div>
         <h3 className="mt-1 truncate text-sm text-auction-ivory">{lot.title}</h3>
         <p className="mt-1 text-xs text-auction-muted">
           Est. {formatEstimate(lot.estimateLow, lot.estimateHigh)}
         </p>
-        <p className="mt-1 text-xs text-auction-muted">
-          Starts in <CountdownTimer initialSeconds={lot.countdownSeconds} compact />
-        </p>
+        {unavailableUntil ? (
+          <p className="mt-1 text-xs text-auction-muted">Unavailable until {unavailableUntil}</p>
+        ) : showTimer ? (
+          <p className="mt-1 text-xs text-auction-muted">
+            {timerLabel} <CountdownTimer initialSeconds={lot.countdownSeconds} compact />
+          </p>
+        ) : (
+          <p className="mt-1 text-xs text-auction-muted">{statusLabel}</p>
+        )}
       </div>
     </Link>
   );

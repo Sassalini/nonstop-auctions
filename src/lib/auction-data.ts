@@ -1,5 +1,6 @@
 import { unstable_noStore as noStore } from "next/cache";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { formatShortDateTime, getLotStatusLabel } from "@/lib/auction-lifecycle";
 import {
   auctionRooms as mockAuctionRooms,
   getLiveLotForRoom as getMockLiveLotForRoom,
@@ -21,8 +22,9 @@ import type {
 } from "@/lib/supabase/types";
 
 export type Lot = MockLot & {
-  auctionStatus?: LotStatus;
+  auctionStatus: LotStatus;
   endsAt?: string | null;
+  nextEligibleAt?: string | null;
 };
 
 export type AuctionRoom = MockAuctionRoom & {
@@ -49,14 +51,21 @@ type SupabaseSnapshot = {
 const visibleLotStatuses: LotStatus[] = [
   "WAITING",
   "PREVIEW",
-  "LIVE",
-  "EXTENDED",
+  "FIRST_BID_WINDOW",
+  "ACTIVE_BIDDING",
   "SOLD",
+  "UNSOLD",
   "CANCELLED",
 ];
 
-const upcomingLotStatuses: LotStatus[] = ["WAITING", "PREVIEW", "LIVE", "EXTENDED"];
-const liveLotStatuses: LotStatus[] = ["LIVE", "EXTENDED"];
+const upcomingLotStatuses: LotStatus[] = [
+  "WAITING",
+  "PREVIEW",
+  "FIRST_BID_WINDOW",
+  "ACTIVE_BIDDING",
+  "UNSOLD",
+];
+const currentLotStatuses: LotStatus[] = ["PREVIEW", "FIRST_BID_WINDOW", "ACTIVE_BIDDING"];
 const fallbackImageUrl = mockLiveLot.imageUrl;
 
 function hasSupabaseEnv() {
@@ -96,21 +105,37 @@ function getSecondsUntil(value: string | null, fallback: number) {
   return Number.isFinite(seconds) ? Math.max(seconds, 0) : fallback;
 }
 
-function formatStartsIn(lot: LotRow) {
-  if (lot.status === "LIVE" || lot.status === "EXTENDED") {
-    return "Live now";
+function getLotCountdownTarget(lot: LotRow) {
+  if (lot.status === "UNSOLD") {
+    return lot.next_eligible_at;
   }
 
-  const seconds = getSecondsUntil(lot.starts_at, lot.preview_duration_seconds);
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = seconds % 60;
-  return `${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`;
+  return lot.ends_at ?? lot.bidding_starts_at ?? lot.preview_starts_at ?? lot.starts_at;
+}
+
+function formatStartsIn(lot: LotRow) {
+  if (lot.status === "PREVIEW" || lot.status === "FIRST_BID_WINDOW" || lot.status === "ACTIVE_BIDDING") {
+    const seconds = getSecondsUntil(getLotCountdownTarget(lot), lot.preview_duration_seconds);
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`;
+  }
+
+  if (lot.status === "UNSOLD") {
+    return lot.next_eligible_at ? formatShortDateTime(lot.next_eligible_at) : "Returned to queue";
+  }
+
+  if (lot.status === "WAITING") {
+    return "Queued";
+  }
+
+  return getLotStatusLabel(lot.status);
 }
 
 function buildDetails(lot: LotRow, room?: AuctionRoomRow) {
   return [
     room?.name ?? "Auction lot",
-    lot.status,
+    getLotStatusLabel(lot.status),
     lot.is_premium ? "Premium listing" : "Public listing",
   ];
 }
@@ -120,7 +145,9 @@ function mapSupabaseLot(bundle: SupabaseLotBundle, lotNumber: number): Lot {
   const galleryImageUrls = images.length
     ? images.map((image) => image.image_url)
     : [room?.image_url ?? fallbackImageUrl];
-  const currentBid = toNumber(lot.current_bid, toNumber(lot.starting_bid));
+  const startingBid = toNumber(lot.starting_bid);
+  const rawCurrentBid = toNumber(lot.current_bid);
+  const currentBid = rawCurrentBid > 0 ? rawCurrentBid : startingBid;
   const minimumIncrement = toNumber(lot.minimum_increment, 50);
 
   return {
@@ -139,14 +166,16 @@ function mapSupabaseLot(bundle: SupabaseLotBundle, lotNumber: number): Lot {
     galleryImageUrls,
     estimateLow: toNumber(lot.starting_bid),
     estimateHigh: Math.max(currentBid + minimumIncrement * 8, toNumber(lot.starting_bid)),
+    startingBid,
     currentBid,
     bidCount: bids.length,
     watchers: 0,
-    countdownSeconds: getSecondsUntil(lot.ends_at ?? lot.starts_at, lot.preview_duration_seconds),
+    countdownSeconds: getSecondsUntil(getLotCountdownTarget(lot), lot.preview_duration_seconds),
     minimumIncrement,
     startsIn: formatStartsIn(lot),
     auctionStatus: lot.status,
     endsAt: lot.ends_at,
+    nextEligibleAt: lot.next_eligible_at,
   };
 }
 
@@ -238,6 +267,18 @@ async function fetchBids(client: SupabaseReadClient, lotIds: string[]) {
   }, new Map<string, BidRow[]>());
 }
 
+async function advanceRoomLifecycles(client: SupabaseReadClient, roomIds: string[]) {
+  await Promise.all(
+    roomIds.map(async (p_room_id) => {
+      const { error } = await client.rpc("advance_room_lifecycle", { p_room_id });
+
+      if (error) {
+        throw error;
+      }
+    }),
+  );
+}
+
 async function fetchSupabaseSnapshot() {
   noStore();
   const client = createSupabaseReadClient();
@@ -246,22 +287,34 @@ async function fetchSupabaseSnapshot() {
     return null;
   }
 
-  const [{ data: roomsData, error: roomsError }, { data: lotsData, error: lotsError }] =
-    await Promise.all([
-      client
-        .from("auction_rooms")
-        .select("*")
-        .eq("is_active", true)
-        .order("created_at", { ascending: true }),
-      client
-        .from("lots")
-        .select("*")
-        .in("status", visibleLotStatuses)
-        .order("starts_at", { ascending: true, nullsFirst: false })
-        .order("created_at", { ascending: true }),
-    ]);
+  const { data: roomsData, error: roomsError } = await client
+    .from("auction_rooms")
+    .select("*")
+    .eq("is_active", true)
+    .order("created_at", { ascending: true });
 
-  if (roomsError || lotsError || !roomsData?.length || !lotsData?.length) {
+  if (roomsError || !roomsData?.length) {
+    return null;
+  }
+
+  try {
+    await advanceRoomLifecycles(
+      client,
+      roomsData.map((room) => room.id),
+    );
+  } catch {
+    return null;
+  }
+
+  const { data: lotsData, error: lotsError } = await client
+    .from("lots")
+    .select("*")
+    .in("status", visibleLotStatuses)
+    .order("queue_position", { ascending: true })
+    .order("next_eligible_at", { ascending: true })
+    .order("created_at", { ascending: true });
+
+  if (lotsError || !lotsData?.length) {
     return null;
   }
 
@@ -287,7 +340,7 @@ async function fetchSupabaseSnapshot() {
   const liveLotByRoomId = new Map<string, Lot>();
 
   visibleLots.forEach((lot) => {
-    if (!liveLotStatuses.includes(lot.status) || liveLotByRoomId.has(lot.room_id)) {
+    if (!currentLotStatuses.includes(lot.status) || liveLotByRoomId.has(lot.room_id)) {
       return;
     }
 

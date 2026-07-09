@@ -2,6 +2,10 @@ import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { AuctionStatusBadge } from "@/components/AuctionStatusBadge";
+import {
+  getLotBadgeVariant,
+  getLotCompactStatusLabel,
+} from "@/lib/auction-lifecycle";
 import { formatCurrency } from "@/lib/format";
 import type { AuctionRoom, Lot } from "@/lib/auction-data";
 
@@ -16,6 +20,8 @@ export function AuctionRoomCard({
   liveLot,
   isActive = false,
 }: AuctionRoomCardProps) {
+  const status = liveLot?.auctionStatus ?? "WAITING";
+
   return (
     <Link
       href={`/rooms/${room.id}`}
@@ -53,7 +59,10 @@ export function AuctionRoomCard({
                 />
               ) : null}
               <span className="absolute left-1 top-1 scale-[0.72] origin-top-left">
-                <AuctionStatusBadge status="live" label="Live" />
+                <AuctionStatusBadge
+                  status={getLotBadgeVariant(status)}
+                  label={getLotCompactStatusLabel(status)}
+                />
               </span>
             </div>
             <div className="min-w-0">

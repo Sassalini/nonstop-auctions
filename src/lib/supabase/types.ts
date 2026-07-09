@@ -10,9 +10,10 @@ export type LotStatus =
   | "DRAFT"
   | "WAITING"
   | "PREVIEW"
-  | "LIVE"
-  | "EXTENDED"
+  | "FIRST_BID_WINDOW"
+  | "ACTIVE_BIDDING"
   | "SOLD"
+  | "UNSOLD"
   | "CANCELLED";
 
 export type ProfileRow = {
@@ -45,10 +46,17 @@ export type LotRow = {
   minimum_increment: number;
   bid_extension_seconds: number;
   preview_duration_seconds: number;
+  first_bid_duration_seconds: number;
+  requeue_delay_days: number;
   status: LotStatus;
   starts_at: string | null;
+  preview_starts_at: string | null;
+  bidding_starts_at: string | null;
   ends_at: string | null;
   sold_at: string | null;
+  unsold_at: string | null;
+  next_eligible_at: string;
+  queue_position: number;
   highest_bidder_id: string | null;
   winning_bid: number | null;
   is_premium: boolean;
@@ -141,10 +149,17 @@ export type Database = {
           minimum_increment?: number;
           bid_extension_seconds?: number;
           preview_duration_seconds?: number;
+          first_bid_duration_seconds?: number;
+          requeue_delay_days?: number;
           status?: LotStatus;
           starts_at?: string | null;
+          preview_starts_at?: string | null;
+          bidding_starts_at?: string | null;
           ends_at?: string | null;
           sold_at?: string | null;
+          unsold_at?: string | null;
+          next_eligible_at?: string;
+          queue_position?: number;
           highest_bidder_id?: string | null;
           winning_bid?: number | null;
           is_premium?: boolean;
@@ -164,10 +179,17 @@ export type Database = {
           minimum_increment?: number;
           bid_extension_seconds?: number;
           preview_duration_seconds?: number;
+          first_bid_duration_seconds?: number;
+          requeue_delay_days?: number;
           status?: LotStatus;
           starts_at?: string | null;
+          preview_starts_at?: string | null;
+          bidding_starts_at?: string | null;
           ends_at?: string | null;
           sold_at?: string | null;
+          unsold_at?: string | null;
+          next_eligible_at?: string;
+          queue_position?: number;
           highest_bidder_id?: string | null;
           winning_bid?: number | null;
           is_premium?: boolean;
@@ -229,6 +251,18 @@ export type Database = {
     };
     Views: Record<string, never>;
     Functions: {
+      advance_lot: {
+        Args: {
+          p_lot_id: string;
+        };
+        Returns: LotRow;
+      };
+      advance_room_lifecycle: {
+        Args: {
+          p_room_id: string;
+        };
+        Returns: LotRow;
+      };
       place_bid: {
         Args: {
           lot_id: string;

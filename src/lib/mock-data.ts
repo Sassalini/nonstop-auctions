@@ -1,3 +1,5 @@
+import type { LotStatus } from "@/lib/supabase/types";
+
 export type AuctionRoom = {
   id: string;
   name: string;
@@ -25,12 +27,16 @@ export type Lot = {
   galleryImageUrls?: string[];
   estimateLow: number;
   estimateHigh: number;
+  startingBid: number;
   currentBid: number;
   bidCount: number;
   watchers: number;
   countdownSeconds: number;
   minimumIncrement: number;
   startsIn: string;
+  auctionStatus: LotStatus;
+  endsAt?: string | null;
+  nextEligibleAt?: string | null;
 };
 
 const jewelleryImage =
@@ -48,6 +54,8 @@ const chairImage =
 const wineImage =
   "https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?auto=format&fit=crop&w=900&q=80";
 
+const returnedToQueueAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
 export const auctionRooms: AuctionRoom[] = [
   {
     id: "jewellery-room",
@@ -57,7 +65,7 @@ export const auctionRooms: AuctionRoom[] = [
     imageUrl: ringImage,
     liveLotId: "lot-128",
     currentBid: 12500,
-    bidCount: 23,
+    bidCount: 0,
   },
   {
     id: "watch-room",
@@ -136,12 +144,14 @@ export const lots: Lot[] = [
     ],
     estimateLow: 13000,
     estimateHigh: 16000,
+    startingBid: 12500,
     currentBid: 12500,
-    bidCount: 23,
+    bidCount: 0,
     watchers: 127,
-    countdownSeconds: 45,
+    countdownSeconds: 30,
     minimumIncrement: 250,
-    startsIn: "Live now",
+    startsIn: "00:30",
+    auctionStatus: "PREVIEW",
   },
   {
     id: "lot-129",
@@ -161,12 +171,14 @@ export const lots: Lot[] = [
     thumbnailUrl: ringImage,
     estimateLow: 4000,
     estimateHigh: 6000,
+    startingBid: 3600,
     currentBid: 3600,
-    bidCount: 8,
+    bidCount: 0,
     watchers: 61,
-    countdownSeconds: 270,
+    countdownSeconds: 30,
     minimumIncrement: 100,
-    startsIn: "00:45",
+    startsIn: "00:30",
+    auctionStatus: "FIRST_BID_WINDOW",
   },
   {
     id: "lot-130",
@@ -188,12 +200,14 @@ export const lots: Lot[] = [
       "https://images.unsplash.com/photo-1619119069152-a2b331eb392a?auto=format&fit=crop&w=900&q=80",
     estimateLow: 3000,
     estimateHigh: 5000,
+    startingBid: 2500,
     currentBid: 2800,
     bidCount: 6,
     watchers: 44,
-    countdownSeconds: 540,
+    countdownSeconds: 5,
     minimumIncrement: 100,
-    startsIn: "01:30",
+    startsIn: "00:05",
+    auctionStatus: "ACTIVE_BIDDING",
   },
   {
     id: "lot-131",
@@ -215,12 +229,15 @@ export const lots: Lot[] = [
       "https://images.unsplash.com/photo-1589674781759-c21c37956a44?auto=format&fit=crop&w=900&q=80",
     estimateLow: 5000,
     estimateHigh: 7000,
+    startingBid: 4750,
     currentBid: 4750,
-    bidCount: 10,
+    bidCount: 0,
     watchers: 73,
-    countdownSeconds: 810,
+    countdownSeconds: 7 * 24 * 60 * 60,
     minimumIncrement: 150,
-    startsIn: "02:15",
+    startsIn: "7 days",
+    auctionStatus: "UNSOLD",
+    nextEligibleAt: returnedToQueueAt,
   },
   {
     id: "lot-132",
@@ -242,12 +259,14 @@ export const lots: Lot[] = [
       "https://images.unsplash.com/photo-1611652022419-a9419f74343d?auto=format&fit=crop&w=900&q=80",
     estimateLow: 2000,
     estimateHigh: 3500,
+    startingBid: 1900,
     currentBid: 1900,
-    bidCount: 5,
+    bidCount: 0,
     watchers: 38,
     countdownSeconds: 1080,
     minimumIncrement: 100,
     startsIn: "03:00",
+    auctionStatus: "WAITING",
   },
   {
     id: "lot-215",
@@ -267,12 +286,14 @@ export const lots: Lot[] = [
     thumbnailUrl: watchImage,
     estimateLow: 7000,
     estimateHigh: 9000,
+    startingBid: 8000,
     currentBid: 8750,
     bidCount: 17,
     watchers: 93,
-    countdownSeconds: 120,
+    countdownSeconds: 5,
     minimumIncrement: 250,
-    startsIn: "Live now",
+    startsIn: "00:05",
+    auctionStatus: "ACTIVE_BIDDING",
   },
   {
     id: "lot-054",
@@ -292,12 +313,14 @@ export const lots: Lot[] = [
     thumbnailUrl: artImage,
     estimateLow: 18000,
     estimateHigh: 26000,
+    startingBid: 20000,
     currentBid: 22000,
     bidCount: 14,
     watchers: 86,
-    countdownSeconds: 180,
+    countdownSeconds: 5,
     minimumIncrement: 500,
-    startsIn: "Live now",
+    startsIn: "00:05",
+    auctionStatus: "ACTIVE_BIDDING",
   },
   {
     id: "lot-078",
@@ -317,12 +340,14 @@ export const lots: Lot[] = [
     thumbnailUrl: chairImage,
     estimateLow: 2500,
     estimateHigh: 4200,
+    startingBid: 3000,
     currentBid: 3200,
     bidCount: 11,
     watchers: 52,
-    countdownSeconds: 240,
+    countdownSeconds: 5,
     minimumIncrement: 100,
-    startsIn: "Live now",
+    startsIn: "00:05",
+    auctionStatus: "ACTIVE_BIDDING",
   },
 ];
 

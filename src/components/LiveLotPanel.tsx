@@ -4,6 +4,7 @@ import { AuctionStatusBadge } from "@/components/AuctionStatusBadge";
 import { BidPanel } from "@/components/BidPanel";
 import { LotImageGallery } from "@/components/LotImageGallery";
 import { LotTabs } from "@/components/LotTabs";
+import { getLotBadgeVariant, getLotStatusLabel } from "@/lib/auction-lifecycle";
 import type { AuctionRoom, Lot } from "@/lib/auction-data";
 
 type LiveLotPanelProps = {
@@ -12,6 +13,8 @@ type LiveLotPanelProps = {
 };
 
 export function LiveLotPanel({ room, lot }: LiveLotPanelProps) {
+  const statusLabel = getLotStatusLabel(lot.auctionStatus);
+
   return (
     <section className="min-w-0 border border-white/10 bg-auction-black/70 p-4 shadow-inner shadow-black/25 backdrop-blur-md lg:p-5">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -23,7 +26,10 @@ export function LiveLotPanel({ room, lot }: LiveLotPanelProps) {
           <span className="truncate text-auction-ivory">{room.category}</span>
         </div>
         <div className="flex items-center gap-2">
-          <AuctionStatusBadge status="live" />
+          <AuctionStatusBadge
+            status={getLotBadgeVariant(lot.auctionStatus)}
+            label={statusLabel}
+          />
           <span className="flex h-7 items-center gap-1 rounded-md border border-white/10 bg-white/[0.04] px-2.5 text-xs text-auction-ivory">
             <Eye size={15} strokeWidth={1.8} />
             {lot.watchers}

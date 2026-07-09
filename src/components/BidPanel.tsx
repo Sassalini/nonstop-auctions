@@ -1,5 +1,6 @@
 import { CountdownTimer } from "@/components/CountdownTimer";
 import { BidForm } from "@/components/BidForm";
+import { getLotTimerLabel, isTimedLifecycleStatus } from "@/lib/auction-lifecycle";
 import { formatCurrency, formatEstimate } from "@/lib/format";
 import type { Lot } from "@/lib/auction-data";
 
@@ -8,6 +9,9 @@ type BidPanelProps = {
 };
 
 export function BidPanel({ lot }: BidPanelProps) {
+  const timerLabel = getLotTimerLabel(lot.auctionStatus);
+  const showTimer = isTimedLifecycleStatus(lot.auctionStatus);
+
   return (
     <section className="rounded-lg border border-auction-gold/25 bg-auction-panel/75 p-4 shadow-glow backdrop-blur-sm">
       <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(10rem,0.8fr)_minmax(14rem,1.05fr)] lg:grid-cols-1 xl:grid-cols-[minmax(7.125rem,0.8fr)_minmax(8.875rem,1fr)_minmax(8.75rem,1fr)]">
@@ -26,10 +30,14 @@ export function BidPanel({ lot }: BidPanelProps) {
         <div className="min-w-0 space-y-4 border-t border-white/10 pt-4 md:border-l md:border-t-0 md:pl-4 md:pt-0 lg:border-l-0 lg:border-t lg:pl-0 lg:pt-4 xl:border-l xl:border-t-0 xl:pl-4 xl:pt-0">
           <div className="min-w-[7.75rem]">
             <p className="whitespace-nowrap text-xs uppercase tracking-[0.18em] text-auction-muted">
-              Time Remaining
+              {showTimer ? timerLabel : "Status"}
             </p>
             <div className="mt-2">
-              <CountdownTimer initialSeconds={lot.countdownSeconds} />
+              {showTimer ? (
+                <CountdownTimer initialSeconds={lot.countdownSeconds} />
+              ) : (
+                <p className="text-sm font-semibold text-auction-ivory">{timerLabel}</p>
+              )}
             </div>
           </div>
           <div>
@@ -46,6 +54,7 @@ export function BidPanel({ lot }: BidPanelProps) {
         <div className="min-w-0 border-t border-white/10 pt-4 md:border-l md:border-t-0 md:pl-4 md:pt-0 lg:border-l-0 lg:border-t lg:pl-0 lg:pt-4 xl:border-l xl:border-t-0 xl:pl-4 xl:pt-0">
           <BidForm
             lotId={lot.id}
+            startingBid={lot.startingBid}
             currentBid={lot.currentBid}
             minimumIncrement={lot.minimumIncrement}
             auctionStatus={lot.auctionStatus}
