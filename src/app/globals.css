@@ -47,8 +47,8 @@ body {
 .site-background-overlay {
   z-index: 1;
   background:
-    radial-gradient(circle at 50% 24%, rgba(5, 5, 5, 0.38), rgba(5, 5, 5, 0.72) 48%, rgba(5, 5, 5, 0.9) 100%),
-    linear-gradient(180deg, rgba(5, 5, 5, 0.82), rgba(5, 5, 5, 0.62) 38%, rgba(5, 5, 5, 0.94));
+    radial-gradient(circle at 50% 24%, rgba(5, 5, 5, 0.3), rgba(5, 5, 5, 0.64) 48%, rgba(5, 5, 5, 0.86) 100%),
+    linear-gradient(180deg, rgba(5, 5, 5, 0.74), rgba(5, 5, 5, 0.54) 38%, rgba(5, 5, 5, 0.9));
 }
 
 button,
@@ -89,7 +89,8 @@ button {
   border: 1px solid rgba(198, 155, 82, 0.16);
   background:
     linear-gradient(145deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.01)),
-    rgba(17, 17, 18, 0.9);
+    rgba(17, 17, 18, 0.74);
+  backdrop-filter: blur(10px);
   box-shadow: 0 18px 55px rgba(0, 0, 0, 0.32);
 }
 

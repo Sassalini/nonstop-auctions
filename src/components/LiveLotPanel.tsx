@@ -13,7 +13,7 @@ type LiveLotPanelProps = {
 
 export function LiveLotPanel({ room, lot }: LiveLotPanelProps) {
   return (
-    <section className="min-w-0 bg-auction-black/90 p-4 backdrop-blur-sm lg:p-5">
+    <section className="min-w-0 border border-white/10 bg-auction-black/70 p-4 shadow-inner shadow-black/25 backdrop-blur-md lg:p-5">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2 text-sm text-auction-muted">
           <Link href={`/rooms/${room.id}`} className="truncate hover:text-auction-gold">
@@ -34,7 +34,7 @@ export function LiveLotPanel({ room, lot }: LiveLotPanelProps) {
       <LotImageGallery lot={lot} />
 
       <div className="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1fr)_460px]">
-        <section className="rounded-lg border border-white/10 bg-auction-panel/85 p-4 sm:p-5">
+        <section className="rounded-lg border border-white/10 bg-auction-panel/75 p-4 shadow-inner shadow-black/20 backdrop-blur-sm sm:p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="text-sm text-auction-muted">Lot {lot.lotNumber}</p>

@@ -46,7 +46,7 @@ function AuctionLogoMark() {
 
 export function AppHeader() {
   return (
-    <header className="sticky top-0 z-40 border-b border-auction-line/80 bg-auction-black/92 backdrop-blur-xl">
+    <header className="sticky top-0 z-40 border-b border-white/10 bg-auction-black/75 shadow-[0_10px_30px_rgba(0,0,0,0.24)] backdrop-blur-xl">
       <div className="mx-auto flex min-h-[74px] max-w-[1880px] items-center gap-3 px-4 sm:px-5 lg:px-7">
         <Link href="/" className="flex shrink-0 items-center gap-3 text-auction-ivory">
           <span className="flex size-10 items-center justify-center rounded-lg border border-auction-gold/30 bg-auction-panel text-auction-gold">
