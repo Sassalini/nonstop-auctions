@@ -29,6 +29,7 @@ export type AuctionRoomRow = {
   slug: string;
   description: string | null;
   image_url: string | null;
+  display_order: number;
   is_active: boolean;
   created_at: string;
 };
@@ -41,6 +42,8 @@ export type LotRow = {
   description: string | null;
   condition_report: string | null;
   shipping_info: string | null;
+  estimate_low: number | null;
+  estimate_high: number | null;
   starting_bid: number;
   current_bid: number;
   minimum_increment: number;
@@ -121,6 +124,7 @@ export type Database = {
           slug: string;
           description?: string | null;
           image_url?: string | null;
+          display_order?: number;
           is_active?: boolean;
           created_at?: string;
         },
@@ -130,6 +134,7 @@ export type Database = {
           slug?: string;
           description?: string | null;
           image_url?: string | null;
+          display_order?: number;
           is_active?: boolean;
           created_at?: string;
         }
@@ -144,6 +149,8 @@ export type Database = {
           description?: string | null;
           condition_report?: string | null;
           shipping_info?: string | null;
+          estimate_low?: number | null;
+          estimate_high?: number | null;
           starting_bid: number;
           current_bid?: number;
           minimum_increment?: number;
@@ -174,6 +181,8 @@ export type Database = {
           description?: string | null;
           condition_report?: string | null;
           shipping_info?: string | null;
+          estimate_low?: number | null;
+          estimate_high?: number | null;
           starting_bid?: number;
           current_bid?: number;
           minimum_increment?: number;

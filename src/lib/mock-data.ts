@@ -39,335 +39,282 @@ export type Lot = {
   nextEligibleAt?: string | null;
 };
 
-const jewelleryImage =
-  "https://images.unsplash.com/photo-1608042314453-ae338d80c427?auto=format&fit=crop&w=1400&q=85";
-const ringImage =
-  "https://images.unsplash.com/photo-1605100804763-247f67b3557e?auto=format&fit=crop&w=900&q=80";
-const watchImage =
-  "https://images.unsplash.com/photo-1523170335258-f5ed11844a49?auto=format&fit=crop&w=900&q=80";
-const artImage =
-  "https://images.unsplash.com/photo-1579783901586-d88db74b4fe4?auto=format&fit=crop&w=900&q=80";
-const collectableImage =
-  "https://images.unsplash.com/photo-1481627834876-b7833e8f5570?auto=format&fit=crop&w=900&q=80";
-const chairImage =
-  "https://images.unsplash.com/photo-1540574163026-643ea20ade25?auto=format&fit=crop&w=900&q=80";
-const wineImage =
-  "https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?auto=format&fit=crop&w=900&q=80";
+type LotDefinition = {
+  title: string;
+  estimateLow: number;
+  estimateHigh: number;
+  startingBid: number;
+};
 
-const returnedToQueueAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+type RoomDefinition = {
+  id: string;
+  name: string;
+  strapline: string;
+  category: string;
+  imageUrl: string;
+  lots: [LotDefinition, LotDefinition, LotDefinition, LotDefinition, LotDefinition];
+};
 
-export const auctionRooms: AuctionRoom[] = [
+const image = (id: string) =>
+  `https://images.unsplash.com/${id}?auto=format&fit=crop&w=1400&q=85`;
+const lot = (
+  title: string,
+  estimateLow: number,
+  estimateHigh: number,
+  startingBid: number,
+): LotDefinition => ({ title, estimateLow, estimateHigh, startingBid });
+
+const roomDefinitions: RoomDefinition[] = [
   {
     id: "jewellery-room",
     name: "The Jewellery Room",
     strapline: "Live auctions. Exceptional pieces.",
     category: "Fine Jewellery",
-    imageUrl: ringImage,
-    liveLotId: "lot-128",
-    currentBid: 12500,
-    bidCount: 0,
+    imageUrl: image("photo-1605100804763-247f67b3557e"),
+    lots: [
+      lot("Pear Shaped Diamond Pendant Necklace", 13000, 16000, 12500),
+      lot("Art Deco Diamond Ring", 4000, 6000, 3600),
+      lot("Sapphire and Diamond Earrings", 3000, 5000, 2500),
+      lot("Emerald Cut Diamond Ring", 5000, 7000, 4750),
+      lot("Diamond Tennis Bracelet", 2000, 3500, 1900),
+    ],
   },
   {
     id: "watch-room",
     name: "The Watch Room",
     strapline: "Timeless craft. Precision performance.",
     category: "Watches",
-    imageUrl: watchImage,
-    liveLotId: "lot-215",
-    currentBid: 8750,
-    bidCount: 17,
+    imageUrl: image("photo-1523170335258-f5ed11844a49"),
+    lots: [
+      lot("Vintage Chronograph Wristwatch", 7000, 9000, 6500),
+      lot("Art Deco Gold Dress Watch", 2400, 3600, 2100),
+      lot("Stainless Steel Diver's Wristwatch", 3200, 4800, 2800),
+      lot("Victorian Silver Pocket Watch", 900, 1400, 750),
+      lot("Watchmaker's Tool Cabinet", 600, 900, 450),
+    ],
   },
   {
     id: "art-room",
     name: "The Art Room",
     strapline: "Iconic works. Enduring value.",
     category: "Modern Art",
-    imageUrl: artImage,
-    liveLotId: "lot-054",
-    currentBid: 22000,
-    bidCount: 14,
+    imageUrl: image("photo-1579783901586-d88db74b4fe4"),
+    lots: [
+      lot("Abstract Oil on Canvas", 18000, 26000, 16000),
+      lot("Signed British Landscape", 1800, 2600, 1500),
+      lot("Limited Edition Screen Print", 900, 1400, 750),
+      lot("Modernist Bronze Sculpture", 3200, 5000, 2800),
+      lot("Mid-Century Mixed Media Collage", 1200, 1800, 950),
+    ],
   },
   {
     id: "collectibles-room",
     name: "The Collectibles Room",
     strapline: "Rare finds. Real stories.",
     category: "Collectibles",
-    imageUrl: collectableImage,
-    liveLotId: "lot-332",
-    currentBid: 1250,
-    bidCount: 9,
+    imageUrl: image("photo-1481627834876-b7833e8f5570"),
+    lots: [
+      lot("British Silver Coin Collection", 1200, 1800, 1000),
+      lot("Vintage Model Car Archive", 700, 1100, 550),
+      lot("Signed Sporting Memorabilia", 900, 1400, 750),
+      lot("Victorian Postcard Album", 450, 700, 350),
+      lot("Staunton Boxwood Chess Set", 600, 900, 475),
+    ],
   },
   {
     id: "design-room",
     name: "The Design Room",
     strapline: "Curated design. Modern classics.",
     category: "Design",
-    imageUrl: chairImage,
-    liveLotId: "lot-078",
-    currentBid: 3200,
-    bidCount: 11,
+    imageUrl: image("photo-1540574163026-643ea20ade25"),
+    lots: [
+      lot("Mid-Century Lounge Chair", 2500, 4200, 2200),
+      lot("Studio Ceramic Table Lamp", 700, 1100, 550),
+      lot("Danish Teak Sideboard", 1800, 2800, 1500),
+      lot("Italian Glass Coffee Table", 1200, 1900, 950),
+      lot("Architect's Swivel Desk Chair", 900, 1400, 700),
+    ],
   },
   {
     id: "wine-room",
     name: "The Wine Room",
     strapline: "Fine wines. Memorable moments.",
     category: "Wine",
-    imageUrl: wineImage,
-    liveLotId: "lot-402",
-    currentBid: 1100,
-    bidCount: 7,
+    imageUrl: image("photo-1510812431401-41d2bd2722f3"),
+    lots: [
+      lot("Twelve-Bottle Bordeaux Case", 1800, 2400, 1600),
+      lot("Burgundy Grand Cru Magnum", 1200, 1700, 1000),
+      lot("Vintage Champagne Collection", 900, 1300, 750),
+      lot("Six-Bottle Vintage Port Lot", 650, 950, 500),
+      lot("Single-Estate Tuscan Wine Case", 800, 1200, 650),
+    ],
+  },
+  {
+    id: "general-room",
+    name: "The General Room",
+    strapline: "Distinctive finds for every collection.",
+    category: "General",
+    imageUrl: image("photo-1553062407-98eeb64c6a62"),
+    lots: [
+      lot("Vintage Leather Travel Case", 350, 550, 275),
+      lot("Decorative Brass Table Lamp", 180, 280, 140),
+      lot("Framed Countryside Print", 120, 200, 90),
+      lot("Handmade Ceramic Vase", 150, 240, 110),
+      lot("Oak Storage Chest", 400, 650, 325),
+    ],
+  },
+  {
+    id: "antiques-room",
+    name: "The Antiques Room",
+    strapline: "Period craftsmanship. Lasting character.",
+    category: "Antiques",
+    imageUrl: image("photo-1586023492125-27b2c045efd7"),
+    lots: [
+      lot("Victorian Mahogany Writing Desk", 1400, 2200, 1200),
+      lot("Edwardian Mantel Clock", 500, 800, 400),
+      lot("Georgian Silver Candlesticks", 1100, 1700, 900),
+      lot("Antique Porcelain Tea Set", 450, 700, 350),
+      lot("Regency Occasional Table", 800, 1200, 650),
+    ],
+  },
+  {
+    id: "library-room",
+    name: "The Library Room",
+    strapline: "Rare editions. Scholarly treasures.",
+    category: "Books & Library",
+    imageUrl: image("photo-1507842217343-583bb7270b66"),
+    lots: [
+      lot("First-Edition Historical Novel", 800, 1200, 650),
+      lot("Leather-Bound Encyclopedia Set", 600, 900, 475),
+      lot("Victorian Writing Slope", 450, 700, 350),
+      lot("Antique Terrestrial Globe", 900, 1400, 750),
+      lot("Walnut Bookcase", 1200, 1800, 1000),
+    ],
+  },
+  {
+    id: "dining-room",
+    name: "The Dining Room",
+    strapline: "Elegant service. Memorable tables.",
+    category: "Dining",
+    imageUrl: image("photo-1617806118233-18e1de247200"),
+    lots: [
+      lot("Silver-Plated Cutlery Service", 700, 1100, 550),
+      lot("Crystal Decanter Set", 350, 550, 275),
+      lot("Set of Mahogany Dining Chairs", 1200, 1900, 1000),
+      lot("Porcelain Dinner Service", 500, 800, 400),
+      lot("Antique Serving Trolley", 650, 950, 500),
+    ],
+  },
+  {
+    id: "music-room",
+    name: "The Music Room",
+    strapline: "Instruments and sound with provenance.",
+    category: "Music",
+    imageUrl: image("photo-1511379938547-c1f69419868d"),
+    lots: [
+      lot("Vintage Acoustic Guitar", 900, 1400, 750),
+      lot("Upright Piano Stool", 250, 400, 190),
+      lot("Brass Gramophone", 600, 900, 475),
+      lot("Curated Vinyl Record Collection", 500, 800, 400),
+      lot("Antique Violin and Case", 1200, 1800, 1000),
+    ],
+  },
+  {
+    id: "technology-room",
+    name: "The Technology Room",
+    strapline: "Landmark machines. Ingenious design.",
+    category: "Technology",
+    imageUrl: image("photo-1518770660439-4636190af6d"),
+    lots: [
+      lot("Vintage Apple Computer", 1800, 2800, 1500),
+      lot("Retro Games Console Bundle", 600, 900, 475),
+      lot("Mechanical Keyboard Collection", 350, 550, 275),
+      lot("Classic 35mm Film Camera", 700, 1100, 550),
+      lot("Restored Valve Radio", 450, 700, 350),
+    ],
   },
 ];
 
-export const lots: Lot[] = [
-  {
-    id: "lot-128",
-    lotNumber: 128,
-    roomId: "jewellery-room",
-    title: "Pear Shaped Diamond Pendant Necklace",
-    category: "Fine Jewellery",
-    maker: "GIA certified",
-    details: ["18ct White Gold", "3.52ct Pear Cut Diamond", "G Colour", "VS1 Clarity"],
-    description:
-      "A striking pear shaped diamond pendant necklace set in 18ct white gold. The centre diamond weighs approximately 3.52 carats and is accompanied by a GIA certificate.",
-    conditionReport:
-      "Excellent overall condition with light handling marks visible under magnification. Clasp is secure and stones are bright, lively, and well matched.",
-    shippingInfo:
-      "Insured UK delivery from GBP 35. International shipping available after checkout, subject to customs and local import rules.",
-    imageUrl: jewelleryImage,
-    thumbnailUrl: jewelleryImage,
-    galleryImageUrls: [
-      jewelleryImage,
-      ringImage,
-      "https://images.unsplash.com/photo-1602751584552-8ba73aad10e1?auto=format&fit=crop&w=900&q=80",
-      "https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?auto=format&fit=crop&w=900&q=80",
-    ],
-    estimateLow: 13000,
-    estimateHigh: 16000,
-    startingBid: 12500,
-    currentBid: 12500,
-    bidCount: 0,
-    watchers: 127,
-    countdownSeconds: 30,
-    minimumIncrement: 250,
-    startsIn: "00:30",
-    auctionStatus: "PREVIEW",
-  },
-  {
-    id: "lot-129",
-    lotNumber: 129,
-    roomId: "jewellery-room",
-    title: "Art Deco Diamond Ring",
-    category: "Fine Jewellery",
-    maker: "Unsigned",
-    details: ["Platinum", "Old European Cut", "Art Deco Mount", "Size M"],
-    description:
-      "An elegant Art Deco diamond ring with geometric shoulders and a bright central stone in a platinum mount.",
-    conditionReport:
-      "Good antique condition with expected wear to the shank. Stones secure and mount presents well.",
-    shippingInfo:
-      "Insured jewellery courier available. Collection by appointment from the London office.",
-    imageUrl: ringImage,
-    thumbnailUrl: ringImage,
-    estimateLow: 4000,
-    estimateHigh: 6000,
-    startingBid: 3600,
-    currentBid: 3600,
-    bidCount: 0,
-    watchers: 61,
-    countdownSeconds: 30,
-    minimumIncrement: 100,
-    startsIn: "00:30",
-    auctionStatus: "FIRST_BID_WINDOW",
-  },
-  {
-    id: "lot-130",
-    lotNumber: 130,
-    roomId: "jewellery-room",
-    title: "Sapphire and Diamond Earrings",
-    category: "Fine Jewellery",
-    maker: "Continental",
-    details: ["18ct Gold", "Oval Sapphires", "Diamond Halo", "Post Fittings"],
-    description:
-      "A balanced pair of sapphire and diamond earrings with vivid blue centres and bright diamond halos.",
-    conditionReport:
-      "Very good condition. Minor surface wear to fittings, with stones appearing secure.",
-    shippingInfo:
-      "Ships in a fitted presentation box with insured delivery options at checkout.",
-    imageUrl:
-      "https://images.unsplash.com/photo-1619119069152-a2b331eb392a?auto=format&fit=crop&w=900&q=80",
-    thumbnailUrl:
-      "https://images.unsplash.com/photo-1619119069152-a2b331eb392a?auto=format&fit=crop&w=900&q=80",
-    estimateLow: 3000,
-    estimateHigh: 5000,
-    startingBid: 2500,
-    currentBid: 2800,
-    bidCount: 6,
-    watchers: 44,
-    countdownSeconds: 5,
-    minimumIncrement: 100,
-    startsIn: "00:05",
-    auctionStatus: "ACTIVE_BIDDING",
-  },
-  {
-    id: "lot-131",
-    lotNumber: 131,
-    roomId: "jewellery-room",
-    title: "Emerald Cut Diamond Ring",
-    category: "Fine Jewellery",
+const testSpeedEnabled =
+  process.env.NODE_ENV === "development" || process.env.AUCTION_TEST_MODE === "true";
+const previewSeconds = testSpeedEnabled ? 10 : 30;
+const returnedToQueueAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+function buildMockLot(
+  room: RoomDefinition,
+  roomIndex: number,
+  definition: LotDefinition,
+  lotIndex: number,
+): Lot {
+  const auctionStatus: LotStatus = lotIndex === 0 ? "PREVIEW" : lotIndex === 4 ? "UNSOLD" : "WAITING";
+  const minimumIncrement = definition.startingBid >= 5000 ? 250 : definition.startingBid >= 1000 ? 100 : 50;
+  const countdownSeconds = auctionStatus === "PREVIEW" ? previewSeconds : auctionStatus === "UNSOLD" ? 7 * 24 * 60 * 60 : 0;
+
+  return {
+    id: `${room.id}-lot-${lotIndex + 1}`,
+    lotNumber: (roomIndex + 1) * 100 + lotIndex + 1,
+    roomId: room.id,
+    title: definition.title,
+    category: room.category,
     maker: "Private collection",
-    details: ["Platinum", "Emerald Cut", "Tapered Baguettes", "Size N"],
-    description:
-      "A clean emerald cut diamond ring with tapered baguette shoulders and crisp architectural lines.",
-    conditionReport:
-      "Excellent condition with crisp facets and minimal wear. Requires final sizing confirmation.",
-    shippingInfo:
-      "High value lots ship by specialist insured courier only.",
-    imageUrl:
-      "https://images.unsplash.com/photo-1589674781759-c21c37956a44?auto=format&fit=crop&w=900&q=80",
-    thumbnailUrl:
-      "https://images.unsplash.com/photo-1589674781759-c21c37956a44?auto=format&fit=crop&w=900&q=80",
-    estimateLow: 5000,
-    estimateHigh: 7000,
-    startingBid: 4750,
-    currentBid: 4750,
+    details: [room.category, "Curated sale", "No reserve unless stated"],
+    description: `${definition.title} selected for ${room.name}, with a clear catalogue description and an estimate reflecting current specialist guidance.`,
+    conditionReport: "Good auction condition with age-related wear noted in the catalogue photographs.",
+    shippingInfo: "Insured UK delivery or collection by appointment. International quotes are available on request.",
+    imageUrl: room.imageUrl,
+    thumbnailUrl: room.imageUrl,
+    galleryImageUrls: [room.imageUrl],
+    estimateLow: definition.estimateLow,
+    estimateHigh: definition.estimateHigh,
+    startingBid: definition.startingBid,
+    currentBid: definition.startingBid,
     bidCount: 0,
-    watchers: 73,
-    countdownSeconds: 7 * 24 * 60 * 60,
-    minimumIncrement: 150,
-    startsIn: "7 days",
-    auctionStatus: "UNSOLD",
-    nextEligibleAt: returnedToQueueAt,
-  },
-  {
-    id: "lot-132",
-    lotNumber: 132,
-    roomId: "jewellery-room",
-    title: "Tennis Bracelet",
-    category: "Fine Jewellery",
-    maker: "Modern",
-    details: ["18ct White Gold", "Round Brilliant Diamonds", "Box Clasp", "17.5cm"],
-    description:
-      "A classic diamond tennis bracelet with a continuous line of bright round brilliant cut stones.",
-    conditionReport:
-      "Good condition. Clasp closes securely and safety catch is working.",
-    shippingInfo:
-      "Insured delivery from GBP 35. Export paperwork can be arranged.",
-    imageUrl:
-      "https://images.unsplash.com/photo-1611652022419-a9419f74343d?auto=format&fit=crop&w=900&q=80",
-    thumbnailUrl:
-      "https://images.unsplash.com/photo-1611652022419-a9419f74343d?auto=format&fit=crop&w=900&q=80",
-    estimateLow: 2000,
-    estimateHigh: 3500,
-    startingBid: 1900,
-    currentBid: 1900,
-    bidCount: 0,
-    watchers: 38,
-    countdownSeconds: 1080,
-    minimumIncrement: 100,
-    startsIn: "03:00",
-    auctionStatus: "WAITING",
-  },
-  {
-    id: "lot-215",
-    lotNumber: 215,
-    roomId: "watch-room",
-    title: "Vintage Chronograph Wristwatch",
-    category: "Watches",
-    maker: "Swiss",
-    details: ["Manual Wind", "Steel Case", "Two Register Dial", "Leather Strap"],
-    description:
-      "A sharp vintage chronograph with balanced dial architecture and a warm aged finish.",
-    conditionReport:
-      "Running at time of cataloguing. Service history is not documented.",
-    shippingInfo:
-      "Specialist watch shipping available, with optional collection from our London desk.",
-    imageUrl: watchImage,
-    thumbnailUrl: watchImage,
-    estimateLow: 7000,
-    estimateHigh: 9000,
-    startingBid: 8000,
-    currentBid: 8750,
-    bidCount: 17,
-    watchers: 93,
-    countdownSeconds: 5,
-    minimumIncrement: 250,
-    startsIn: "00:05",
-    auctionStatus: "ACTIVE_BIDDING",
-  },
-  {
-    id: "lot-054",
-    lotNumber: 54,
-    roomId: "art-room",
-    title: "Abstract Oil on Canvas",
-    category: "Modern Art",
-    maker: "British school",
-    details: ["Oil on Canvas", "Signed Lower Right", "Framed", "92 x 122cm"],
-    description:
-      "A large scale abstract composition with layered colour, movement, and strong room presence.",
-    conditionReport:
-      "Minor surface marks to frame. Canvas appears stable with no obvious tears.",
-    shippingInfo:
-      "Fine art courier quote required before dispatch.",
-    imageUrl: artImage,
-    thumbnailUrl: artImage,
-    estimateLow: 18000,
-    estimateHigh: 26000,
-    startingBid: 20000,
-    currentBid: 22000,
-    bidCount: 14,
-    watchers: 86,
-    countdownSeconds: 5,
-    minimumIncrement: 500,
-    startsIn: "00:05",
-    auctionStatus: "ACTIVE_BIDDING",
-  },
-  {
-    id: "lot-078",
-    lotNumber: 78,
-    roomId: "design-room",
-    title: "Mid-Century Lounge Chair",
-    category: "Design",
-    maker: "Attributed Danish",
-    details: ["Leather", "Walnut Frame", "1960s", "Restored"],
-    description:
-      "A handsome mid-century lounge chair with a sculptural walnut frame and deep leather seat.",
-    conditionReport:
-      "Restored condition with attractive patina to the leather and light frame wear.",
-    shippingInfo:
-      "Furniture courier quote available after the auction.",
-    imageUrl: chairImage,
-    thumbnailUrl: chairImage,
-    estimateLow: 2500,
-    estimateHigh: 4200,
-    startingBid: 3000,
-    currentBid: 3200,
-    bidCount: 11,
-    watchers: 52,
-    countdownSeconds: 5,
-    minimumIncrement: 100,
-    startsIn: "00:05",
-    auctionStatus: "ACTIVE_BIDDING",
-  },
-];
+    watchers: 18 + roomIndex * 4 + lotIndex * 3,
+    countdownSeconds,
+    minimumIncrement,
+    startsIn: auctionStatus === "PREVIEW" ? `00:${String(previewSeconds).padStart(2, "0")}` : auctionStatus === "UNSOLD" ? "7 days" : "Queued",
+    auctionStatus,
+    nextEligibleAt: auctionStatus === "UNSOLD" ? returnedToQueueAt : null,
+  };
+}
+
+export const lots: Lot[] = roomDefinitions.flatMap((room, roomIndex) =>
+  room.lots.map((definition, lotIndex) => buildMockLot(room, roomIndex, definition, lotIndex)),
+);
+
+export const auctionRooms: AuctionRoom[] = roomDefinitions.map((room) => {
+  const liveRoomLot = lots.find((candidate) => candidate.roomId === room.id && candidate.auctionStatus === "PREVIEW");
+
+  return {
+    id: room.id,
+    name: room.name,
+    strapline: room.strapline,
+    category: room.category,
+    imageUrl: room.imageUrl,
+    liveLotId: liveRoomLot?.id ?? "",
+    currentBid: liveRoomLot?.currentBid ?? 0,
+    bidCount: liveRoomLot?.bidCount ?? 0,
+  };
+});
 
 export const liveLot = lots[0];
-
-export const upcomingLots = lots.slice(1, 6);
+export const upcomingLots = lots.filter(
+  (candidate) => candidate.roomId === liveLot.roomId && candidate.id !== liveLot.id,
+).slice(0, 5);
 
 export function getRoomById(roomId: string) {
   return auctionRooms.find((room) => room.id === roomId);
 }
 
 export function getLotById(lotId: string) {
-  return lots.find((lot) => lot.id === lotId);
+  return lots.find((candidate) => candidate.id === lotId);
 }
 
 export function getLiveLotForRoom(roomId: string) {
   const room = getRoomById(roomId);
-  return lots.find((lot) => lot.id === room?.liveLotId) ?? liveLot;
+  return lots.find((candidate) => candidate.id === room?.liveLotId) ?? liveLot;
 }
 
 export function getRoomLots(roomId: string) {
-  return lots.filter((lot) => lot.roomId === roomId);
+  return lots.filter((candidate) => candidate.roomId === roomId);
 }

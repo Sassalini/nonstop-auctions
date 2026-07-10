@@ -41,13 +41,6 @@ type SupabaseLotBundle = {
   bids: BidRow[];
 };
 
-type SupabaseSnapshot = {
-  rooms: AuctionRoom[];
-  lots: Lot[];
-  bidRows: BidRow[];
-  sourceLotsById: Map<string, LotRow>;
-};
-
 const visibleLotStatuses: LotStatus[] = [
   "WAITING",
   "PREVIEW",
@@ -164,8 +157,11 @@ function mapSupabaseLot(bundle: SupabaseLotBundle, lotNumber: number): Lot {
     imageUrl: galleryImageUrls[0],
     thumbnailUrl: galleryImageUrls[0],
     galleryImageUrls,
-    estimateLow: toNumber(lot.starting_bid),
-    estimateHigh: Math.max(currentBid + minimumIncrement * 8, toNumber(lot.starting_bid)),
+    estimateLow: toNumber(lot.estimate_low, startingBid),
+    estimateHigh: toNumber(
+      lot.estimate_high,
+      Math.max(currentBid + minimumIncrement * 8, startingBid),
+    ),
     startingBid,
     currentBid,
     bidCount: bids.length,
@@ -291,6 +287,7 @@ async function fetchSupabaseSnapshot() {
     .from("auction_rooms")
     .select("*")
     .eq("is_active", true)
+    .order("display_order", { ascending: true })
     .order("created_at", { ascending: true });
 
   if (roomsError || !roomsData?.length) {
@@ -375,12 +372,137 @@ async function fetchSupabaseSnapshot() {
   };
 }
 
-function getRoomFromSnapshot(snapshot: SupabaseSnapshot, roomSlug: string) {
-  return snapshot.rooms.find((room) => room.slug === roomSlug || room.id === roomSlug) ?? null;
+type RoomAuctionState = {
+  currentLot: Lot | null;
+  upcomingLots: Lot[];
+};
+
+async function fetchSupabaseRoomAuctionState(
+  roomSlug: string,
+  excludeLotId?: string,
+  limit = 5,
+): Promise<RoomAuctionState | null> {
+  noStore();
+  const client = createSupabaseReadClient();
+
+  if (!client) {
+    return null;
+  }
+
+  const { data: room, error: roomError } = await client
+    .from("auction_rooms")
+    .select("*")
+    .eq("slug", roomSlug)
+    .eq("is_active", true)
+    .maybeSingle();
+
+  if (roomError || !room) {
+    return null;
+  }
+
+  const { error: lifecycleError } = await client.rpc("advance_room_lifecycle", {
+    p_room_id: room.id,
+  });
+
+  if (lifecycleError) {
+    return null;
+  }
+
+  const { data: currentLotRow, error: currentLotError } = await client
+    .from("lots")
+    .select("*")
+    .eq("room_id", room.id)
+    .in("status", currentLotStatuses)
+    .order("queue_position", { ascending: true })
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (currentLotError) {
+    return null;
+  }
+
+  const excludedId = excludeLotId ?? currentLotRow?.id;
+  let upcomingQuery = client
+    .from("lots")
+    .select("*")
+    .eq("room_id", room.id)
+    .in("status", upcomingLotStatuses)
+    .order("queue_position", { ascending: true })
+    .order("next_eligible_at", { ascending: true })
+    .order("created_at", { ascending: true })
+    .limit(limit);
+
+  if (excludedId) {
+    upcomingQuery = upcomingQuery.neq("id", excludedId);
+  }
+
+  const { data: upcomingRows, error: upcomingError } = await upcomingQuery;
+
+  if (upcomingError || !upcomingRows) {
+    return null;
+  }
+
+  const sourceRows = Array.from(
+    new Map(
+      [currentLotRow, ...upcomingRows]
+        .filter((lot): lot is LotRow => Boolean(lot))
+        .map((lot) => [lot.id, lot]),
+    ).values(),
+  );
+  const lotIds = sourceRows.map((lot) => lot.id);
+  const [imagesByLotId, bidsByLotId] = await Promise.all([
+    fetchLotImages(client, lotIds),
+    fetchBids(client, lotIds),
+  ]);
+  const mappedLots = sourceRows.map((lot, index) =>
+    mapSupabaseLot(
+      {
+        lot,
+        room,
+        images: imagesByLotId.get(lot.id) ?? [],
+        bids: bidsByLotId.get(lot.id) ?? [],
+      },
+      lot.queue_position > 0 ? lot.queue_position : index + 1,
+    ),
+  );
+  const mappedById = new Map(mappedLots.map((lot) => [lot.id, lot]));
+
+  return {
+    currentLot: currentLotRow ? mappedById.get(currentLotRow.id) ?? null : null,
+    upcomingLots: upcomingRows
+      .map((lot) => mappedById.get(lot.id))
+      .filter((lot): lot is Lot => Boolean(lot)),
+  };
 }
 
-function getLotsForRoom(snapshot: SupabaseSnapshot, roomSlug: string) {
-  return snapshot.lots.filter((lot) => lot.roomId === roomSlug);
+async function getRoomAuctionState(
+  roomSlug: string,
+  excludeLotId?: string,
+  limit = 5,
+): Promise<RoomAuctionState | null> {
+  const supabaseState = await fetchSupabaseRoomAuctionState(roomSlug, excludeLotId, limit);
+
+  if (supabaseState) {
+    return supabaseState;
+  }
+
+  const mockRoom = getMockRoomBySlug(roomSlug);
+
+  if (!mockRoom) {
+    return null;
+  }
+
+  const currentLot = getMockLiveLotForRoom(mockRoom.id);
+  const excludedId = excludeLotId ?? currentLot.id;
+
+  return {
+    currentLot,
+    upcomingLots: getMockRoomLots(mockRoom.id)
+      .filter((lot) => lot.id !== excludedId)
+      .filter((lot) => upcomingLotStatuses.includes(lot.auctionStatus))
+      .slice(0, limit),
+  };
 }
 
 export async function getAuctionRooms() {
@@ -391,53 +513,14 @@ export async function getAuctionRooms() {
 
 export async function getLiveLotByRoomSlug(roomSlug: string) {
   noStore();
-  const snapshot = await fetchSupabaseSnapshot();
-
-  if (!snapshot) {
-    const mockRoom = getMockRoomBySlug(roomSlug);
-    return mockRoom ? getMockLiveLotForRoom(mockRoom.id) : mockLiveLot;
-  }
-
-  const room = getRoomFromSnapshot(snapshot, roomSlug);
-
-  if (!room) {
-    return null;
-  }
-
-  return (
-    snapshot.lots.find((lot) => lot.id === room.liveLotId) ??
-    getLotsForRoom(snapshot, room.slug)[0] ??
-    null
-  );
+  const state = await getRoomAuctionState(roomSlug);
+  return state?.currentLot ?? null;
 }
 
 export async function getUpcomingLotsByRoomSlug(roomSlug: string) {
   noStore();
-  const snapshot = await fetchSupabaseSnapshot();
-
-  if (!snapshot) {
-    const mockRoom = getMockRoomBySlug(roomSlug);
-    const currentLot = mockRoom ? getMockLiveLotForRoom(mockRoom.id) : mockLiveLot;
-    const roomLots = mockRoom
-      ? getMockRoomLots(mockRoom.id).filter((lot) => lot.id !== currentLot.id)
-      : [];
-
-    return [...roomLots, ...mockUpcomingLots].slice(0, 5);
-  }
-
-  const room = getRoomFromSnapshot(snapshot, roomSlug);
-
-  if (!room) {
-    return [];
-  }
-
-  return getLotsForRoom(snapshot, room.slug)
-    .filter((lot) => lot.id !== room.liveLotId)
-    .filter((lot) => {
-      const sourceLot = snapshot.sourceLotsById.get(lot.id);
-      return sourceLot ? upcomingLotStatuses.includes(sourceLot.status) : true;
-    })
-    .slice(0, 6);
+  const state = await getRoomAuctionState(roomSlug);
+  return state?.upcomingLots ?? [];
 }
 
 export async function getLotById(lotId: string) {
@@ -490,15 +573,14 @@ export async function getHomeAuctionData() {
   noStore();
   const rooms = await getAuctionRooms();
   const activeRoom = rooms[0] ?? getMockHomeAuctionData().activeRoom;
-  const currentLot =
-    (await getLiveLotByRoomSlug(activeRoom.slug ?? activeRoom.id)) ?? getMockHomeAuctionData().currentLot;
-  const upcomingLots = await getUpcomingLotsByRoomSlug(activeRoom.slug ?? activeRoom.id);
+  const state = await getRoomAuctionState(activeRoom.slug ?? activeRoom.id);
+  const currentLot = state?.currentLot ?? getMockHomeAuctionData().currentLot;
 
   return {
     rooms,
     activeRoom,
     currentLot,
-    upcomingLots: upcomingLots.length ? upcomingLots : getMockHomeAuctionData().upcomingLots,
+    upcomingLots: state?.upcomingLots ?? [],
   };
 }
 
@@ -512,19 +594,18 @@ export async function getRoomAuctionData(roomSlug: string) {
     return null;
   }
 
-  const currentLot = await getLiveLotByRoomSlug(activeRoom.slug ?? activeRoom.id);
+  const state = await getRoomAuctionState(activeRoom.slug ?? activeRoom.id);
+  const currentLot = state?.currentLot ?? null;
 
   if (!currentLot) {
     return null;
   }
 
-  const upcomingLots = await getUpcomingLotsByRoomSlug(activeRoom.slug ?? activeRoom.id);
-
   return {
     rooms,
     activeRoom,
     currentLot,
-    upcomingLots,
+    upcomingLots: state?.upcomingLots ?? [],
   };
 }
 
@@ -546,14 +627,15 @@ export async function getLotAuctionData(lotId: string) {
     return null;
   }
 
-  const upcomingLots = (await getUpcomingLotsByRoomSlug(activeRoom.slug ?? activeRoom.id)).filter(
-    (lot) => lot.id !== currentLot.id,
+  const state = await getRoomAuctionState(
+    activeRoom.slug ?? activeRoom.id,
+    currentLot.id,
   );
 
   return {
     rooms,
     activeRoom,
     currentLot,
-    upcomingLots,
+    upcomingLots: state?.upcomingLots ?? [],
   };
 }

@@ -14,7 +14,7 @@ export function AuctionRoomSidebar({
 }: AuctionRoomSidebarProps) {
   return (
     <aside
-      className={`border border-white/10 bg-black/[0.65] p-4 shadow-inner shadow-black/25 backdrop-blur-sm lg:p-5 ${className}`}
+      className={`border border-white/10 bg-black/[0.65] p-4 shadow-inner shadow-black/25 backdrop-blur-sm lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto lg:p-5 ${className}`}
     >
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-xs font-semibold uppercase tracking-[0.22em] text-auction-gold">

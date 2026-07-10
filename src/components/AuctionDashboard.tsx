@@ -21,7 +21,11 @@ export function AuctionDashboard({
       <div className="order-1 min-w-0 lg:order-2">
         <LiveLotPanel room={activeRoom} lot={currentLot} />
       </div>
-      <UpcomingLotsSidebar lots={upcomingLots} className="order-2 lg:order-3" />
+      <UpcomingLotsSidebar
+        room={activeRoom}
+        lots={upcomingLots}
+        className="order-2 lg:order-3"
+      />
       <AuctionRoomSidebar
         rooms={rooms}
         activeRoomId={activeRoom.id}
