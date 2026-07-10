@@ -26,16 +26,18 @@ export function CountdownTimer({ initialSeconds, compact = false }: CountdownTim
   const [secondsLeft, setSecondsLeft] = useState(initialSeconds);
 
   useEffect(() => {
-    setSecondsLeft(initialSeconds);
-  }, [initialSeconds]);
+    const targetTime = Date.now() + Math.max(initialSeconds, 0) * 1000;
+    const updateDisplay = () => {
+      setSecondsLeft(Math.max(0, Math.ceil((targetTime - Date.now()) / 1000)));
+    };
 
-  useEffect(() => {
+    updateDisplay();
     const interval = window.setInterval(() => {
-      setSecondsLeft((current) => Math.max(current - 1, 0));
-    }, 1000);
+      updateDisplay();
+    }, 250);
 
     return () => window.clearInterval(interval);
-  }, []);
+  }, [initialSeconds]);
 
   const label = useMemo(() => formatSeconds(secondsLeft), [secondsLeft]);
 

@@ -46,6 +46,7 @@ export type LotRow = {
   estimate_high: number | null;
   starting_bid: number;
   current_bid: number;
+  bid_count: number;
   minimum_increment: number;
   bid_extension_seconds: number;
   preview_duration_seconds: number;
@@ -153,6 +154,7 @@ export type Database = {
           estimate_high?: number | null;
           starting_bid: number;
           current_bid?: number;
+          bid_count?: number;
           minimum_increment?: number;
           bid_extension_seconds?: number;
           preview_duration_seconds?: number;
@@ -185,6 +187,7 @@ export type Database = {
           estimate_high?: number | null;
           starting_bid?: number;
           current_bid?: number;
+          bid_count?: number;
           minimum_increment?: number;
           bid_extension_seconds?: number;
           preview_duration_seconds?: number;

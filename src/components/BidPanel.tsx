@@ -58,7 +58,6 @@ export function BidPanel({ lot }: BidPanelProps) {
             currentBid={lot.currentBid}
             minimumIncrement={lot.minimumIncrement}
             auctionStatus={lot.auctionStatus}
-            endsAt={lot.endsAt}
           />
         </div>
       </div>

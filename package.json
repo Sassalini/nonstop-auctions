@@ -12,6 +12,7 @@
     "upload": "opennextjs-cloudflare build && wrangler versions upload",
     "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
     "start": "next start",
+    "test": "node --no-warnings --test tests/auction-lifecycle.test.mjs",
     "lint": "eslint . --max-warnings=0",
     "typecheck": "tsc --noEmit"
   },

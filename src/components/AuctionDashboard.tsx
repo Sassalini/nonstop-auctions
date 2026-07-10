@@ -1,3 +1,4 @@
+import { AuctionLiveSync } from "@/components/AuctionLiveSync";
 import { AuctionRoomSidebar } from "@/components/AuctionRoomSidebar";
 import { LiveLotPanel } from "@/components/LiveLotPanel";
 import { UpcomingLotsSidebar } from "@/components/UpcomingLotsSidebar";
@@ -17,20 +18,28 @@ export function AuctionDashboard({
   upcomingLots,
 }: AuctionDashboardProps) {
   return (
-    <main className="mx-auto grid max-w-[1880px] grid-cols-1 gap-px bg-auction-line/45 lg:grid-cols-[280px_minmax(0,1fr)_320px] 2xl:grid-cols-[320px_minmax(0,1fr)_380px]">
-      <div className="order-1 min-w-0 lg:order-2">
-        <LiveLotPanel room={activeRoom} lot={currentLot} />
-      </div>
-      <UpcomingLotsSidebar
-        room={activeRoom}
-        lots={upcomingLots}
-        className="order-2 lg:order-3"
+    <>
+      <AuctionLiveSync
+        databaseRoomId={activeRoom.databaseId}
+        lotId={currentLot.id}
+        status={currentLot.auctionStatus}
+        countdownSeconds={currentLot.countdownSeconds}
       />
-      <AuctionRoomSidebar
-        rooms={rooms}
-        activeRoomId={activeRoom.id}
-        className="order-3 lg:order-1"
-      />
-    </main>
+      <main className="mx-auto grid max-w-[1880px] grid-cols-1 gap-px bg-auction-line/45 lg:grid-cols-[280px_minmax(0,1fr)_320px] 2xl:grid-cols-[320px_minmax(0,1fr)_380px]">
+        <div className="order-1 min-w-0 lg:order-2">
+          <LiveLotPanel room={activeRoom} lot={currentLot} />
+        </div>
+        <UpcomingLotsSidebar
+          room={activeRoom}
+          lots={upcomingLots}
+          className="order-2 lg:order-3"
+        />
+        <AuctionRoomSidebar
+          rooms={rooms}
+          activeRoomId={activeRoom.id}
+          className="order-3 lg:order-1"
+        />
+      </main>
+    </>
   );
 }

@@ -29,6 +29,7 @@ export type Lot = MockLot & {
 
 export type AuctionRoom = MockAuctionRoom & {
   slug: string;
+  databaseId?: string;
   liveLot?: Lot;
 };
 
@@ -65,6 +66,19 @@ function hasSupabaseEnv() {
   return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 }
 
+function getErrorMessage(error: unknown) {
+  if (error && typeof error === "object" && "message" in error) {
+    return String(error.message);
+  }
+
+  return String(error);
+}
+
+function throwAuctionDataError(context: string, error: unknown): never {
+  console.error(`[Auction data] ${context}:`, error);
+  throw new Error(`${context}: ${getErrorMessage(error)}`);
+}
+
 function createSupabaseReadClient() {
   if (!hasSupabaseEnv()) {
     return null;
@@ -94,7 +108,7 @@ function getSecondsUntil(value: string | null, fallback: number) {
   }
 
   const target = new Date(value).getTime();
-  const seconds = Math.round((target - Date.now()) / 1000);
+  const seconds = Math.ceil((target - Date.now()) / 1000);
   return Number.isFinite(seconds) ? Math.max(seconds, 0) : fallback;
 }
 
@@ -164,7 +178,7 @@ function mapSupabaseLot(bundle: SupabaseLotBundle, lotNumber: number): Lot {
     ),
     startingBid,
     currentBid,
-    bidCount: bids.length,
+    bidCount: toNumber(lot.bid_count, bids.length),
     watchers: 0,
     countdownSeconds: getSecondsUntil(getLotCountdownTarget(lot), lot.preview_duration_seconds),
     minimumIncrement,
@@ -179,6 +193,7 @@ function mapSupabaseRoom(room: AuctionRoomRow, liveLot?: Lot): AuctionRoom {
   return {
     id: room.slug,
     slug: room.slug,
+    databaseId: room.id,
     name: room.name,
     strapline: room.description ?? "Live auctions. Exceptional pieces.",
     category: room.name,
@@ -229,6 +244,9 @@ async function fetchLotImages(client: SupabaseReadClient, lotIds: string[]) {
     .order("sort_order", { ascending: true });
 
   if (error || !data) {
+    if (error) {
+      console.error("[Auction data] Could not load lot images:", error);
+    }
     return new Map<string, LotImageRow[]>();
   }
 
@@ -252,6 +270,9 @@ async function fetchBids(client: SupabaseReadClient, lotIds: string[]) {
     .order("created_at", { ascending: false });
 
   if (error || !data) {
+    if (error) {
+      console.error("[Auction data] Could not load bids:", error);
+    }
     return new Map<string, BidRow[]>();
   }
 
@@ -290,7 +311,11 @@ async function fetchSupabaseSnapshot() {
     .order("display_order", { ascending: true })
     .order("created_at", { ascending: true });
 
-  if (roomsError || !roomsData?.length) {
+  if (roomsError) {
+    throwAuctionDataError("Could not load auction rooms", roomsError);
+  }
+
+  if (!roomsData?.length) {
     return null;
   }
 
@@ -299,8 +324,8 @@ async function fetchSupabaseSnapshot() {
       client,
       roomsData.map((room) => room.id),
     );
-  } catch {
-    return null;
+  } catch (error) {
+    throwAuctionDataError("Could not advance auction room lifecycles", error);
   }
 
   const { data: lotsData, error: lotsError } = await client
@@ -311,7 +336,11 @@ async function fetchSupabaseSnapshot() {
     .order("next_eligible_at", { ascending: true })
     .order("created_at", { ascending: true });
 
-  if (lotsError || !lotsData?.length) {
+  if (lotsError) {
+    throwAuctionDataError("Could not load auction lots", lotsError);
+  }
+
+  if (!lotsData?.length) {
     return null;
   }
 
@@ -396,7 +425,11 @@ async function fetchSupabaseRoomAuctionState(
     .eq("is_active", true)
     .maybeSingle();
 
-  if (roomError || !room) {
+  if (roomError) {
+    throwAuctionDataError(`Could not load auction room ${roomSlug}`, roomError);
+  }
+
+  if (!room) {
     return null;
   }
 
@@ -405,7 +438,7 @@ async function fetchSupabaseRoomAuctionState(
   });
 
   if (lifecycleError) {
-    return null;
+    throwAuctionDataError(`Could not advance auction room ${roomSlug}`, lifecycleError);
   }
 
   const { data: currentLotRow, error: currentLotError } = await client
@@ -419,7 +452,7 @@ async function fetchSupabaseRoomAuctionState(
     .maybeSingle();
 
   if (currentLotError) {
-    return null;
+    throwAuctionDataError(`Could not load the current lot for ${roomSlug}`, currentLotError);
   }
 
   const excludedId = excludeLotId ?? currentLotRow?.id;
@@ -440,6 +473,9 @@ async function fetchSupabaseRoomAuctionState(
   const { data: upcomingRows, error: upcomingError } = await upcomingQuery;
 
   if (upcomingError || !upcomingRows) {
+    if (upcomingError) {
+      throwAuctionDataError(`Could not load upcoming lots for ${roomSlug}`, upcomingError);
+    }
     return null;
   }
 
@@ -549,6 +585,9 @@ export async function getBidsByLotId(lotId: string) {
     .order("created_at", { ascending: false });
 
   if (error || !data) {
+    if (error) {
+      console.error(`[Auction data] Could not load bids for lot ${lotId}:`, error);
+    }
     return [];
   }
 

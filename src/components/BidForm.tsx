@@ -14,7 +14,6 @@ type BidFormProps = {
   currentBid: number;
   minimumIncrement: number;
   auctionStatus?: LotStatus;
-  endsAt?: string | null;
 };
 
 function parseBidAmount(value: string) {
@@ -53,7 +52,6 @@ export function BidForm({
   currentBid,
   minimumIncrement,
   auctionStatus,
-  endsAt,
 }: BidFormProps) {
   const router = useRouter();
   const minimumBid = getMinimumAcceptedBid({
@@ -68,6 +66,8 @@ export function BidForm({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPending, startTransition] = useTransition();
   const biddingIsOpen = isBiddingOpen(auctionStatus);
+  const numericAmount = parseBidAmount(amount);
+  const bidIsInvalid = !Number.isFinite(numericAmount) || numericAmount < minimumBid;
 
   const formattedMinimum = useMemo(() => formatCurrency(minimumBid), [minimumBid]);
 
@@ -86,17 +86,9 @@ export function BidForm({
       return;
     }
 
-    const numericAmount = parseBidAmount(amount);
-
-    if (!Number.isFinite(numericAmount) || numericAmount < minimumBid) {
+    if (bidIsInvalid) {
       setIsError(true);
       setMessage(`Bid is too low. Minimum bid is ${formattedMinimum}.`);
-      return;
-    }
-
-    if (endsAt && Date.now() >= new Date(endsAt).getTime()) {
-      setIsError(true);
-      setMessage("This auction has ended.");
       return;
     }
 
@@ -119,6 +111,7 @@ export function BidForm({
       });
 
       if (error) {
+        console.error("Bid RPC failed:", error);
         setIsError(true);
         setMessage(getBidErrorMessage(error.message, formattedMinimum));
         return;
@@ -129,6 +122,7 @@ export function BidForm({
         router.refresh();
       });
     } catch (error) {
+      console.error("Bid request failed:", error);
       setIsError(true);
       setMessage(
         error instanceof Error
@@ -161,15 +155,19 @@ export function BidForm({
       </div>
       <button
         type="submit"
-        disabled={!biddingIsOpen || isSubmitting || isPending}
+        disabled={!biddingIsOpen || bidIsInvalid || isSubmitting || isPending}
         className="flex h-11 w-full items-center justify-center gap-2 rounded-md bg-auction-gold px-4 text-sm font-semibold text-black transition hover:bg-auction-goldSoft disabled:cursor-not-allowed disabled:bg-auction-gold/40 disabled:text-black/60"
       >
         <Gavel size={18} strokeWidth={1.9} />
-        {!biddingIsOpen
-          ? "Bidding Not Open"
-          : isSubmitting || isPending
-            ? "Placing Bid"
-            : "Place Bid"}
+        {isSubmitting || isPending
+          ? "Placing Bid"
+          : auctionStatus === "SOLD"
+            ? "Sold"
+            : auctionStatus === "UNSOLD"
+              ? "Returned"
+              : biddingIsOpen
+                ? "Place Bid"
+                : "Bidding Not Open"}
       </button>
       <div className="flex min-h-5 items-center justify-between gap-3 text-xs text-auction-muted">
         <span>Minimum bid: {formattedMinimum}</span>
