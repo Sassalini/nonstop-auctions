@@ -29,7 +29,7 @@ export function UpcomingLotCard({ lot }: UpcomingLotCardProps) {
   return (
     <Link
       href={`/lots/${lot.id}`}
-      className="grid grid-cols-[108px_minmax(0,1fr)] gap-3 rounded-lg border border-white/10 bg-black/50 p-2 transition hover:border-auction-gold/55 hover:bg-black/60"
+      className="grid grid-cols-[108px_minmax(0,1fr)] gap-3 rounded-lg border border-white/10 bg-black/[0.7] p-2 transition hover:border-auction-gold/55 hover:bg-black/[0.75]"
     >
       <div className="relative aspect-[4/3] overflow-hidden rounded-md border border-white/10 bg-black">
         <Image

@@ -19,7 +19,7 @@ export function LotTabs({ lot }: LotTabsProps) {
   }[activeTab];
 
   return (
-    <section className="rounded-lg border border-white/10 bg-auction-ink/70 backdrop-blur-sm">
+    <section className="rounded-lg border border-white/10 bg-black/[0.68] backdrop-blur-sm">
       <div className="flex gap-1 overflow-x-auto border-b border-white/10 px-3 pt-3">
         {tabLabels.map((label) => {
           const isActive = activeTab === label;
