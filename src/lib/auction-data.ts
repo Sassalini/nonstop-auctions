@@ -1,4 +1,6 @@
 import { unstable_noStore as noStore } from "next/cache";
+import { getAuctionDataMode } from "@/lib/auction-mode";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { formatShortDateTime, getLotStatusLabel } from "@/lib/auction-lifecycle";
 import {
@@ -6,9 +8,7 @@ import {
   getLiveLotForRoom as getMockLiveLotForRoom,
   getLotById as getMockLotById,
   getRoomLots as getMockRoomLots,
-  liveLot as mockLiveLot,
   lots as mockLots,
-  upcomingLots as mockUpcomingLots,
   type AuctionRoom as MockAuctionRoom,
   type Lot as MockLot,
 } from "@/lib/mock-data";
@@ -60,10 +60,14 @@ const upcomingLotStatuses: LotStatus[] = [
   "UNSOLD",
 ];
 const currentLotStatuses: LotStatus[] = ["PREVIEW", "FIRST_BID_WINDOW", "ACTIVE_BIDDING"];
-const fallbackImageUrl = mockLiveLot.imageUrl;
+const fallbackImageUrl = "/images/auction-house-background.png";
 
-function hasSupabaseEnv() {
-  return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+function isDemoMode() {
+  return getAuctionDataMode({
+    supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
+    supabaseKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    demoMode: process.env.AUCTION_DEMO_MODE,
+  }) === "demo";
 }
 
 function getErrorMessage(error: unknown) {
@@ -80,7 +84,7 @@ function throwAuctionDataError(context: string, error: unknown): never {
 }
 
 function createSupabaseReadClient() {
-  if (!hasSupabaseEnv()) {
+  if (isDemoMode()) {
     return null;
   }
 
@@ -221,17 +225,6 @@ function getMockRoomBySlug(roomSlug: string) {
   return getMockAuctionRooms().find((room) => room.slug === roomSlug || room.id === roomSlug);
 }
 
-function getMockHomeAuctionData() {
-  const rooms = getMockAuctionRooms();
-
-  return {
-    rooms,
-    activeRoom: rooms[0],
-    currentLot: mockLiveLot,
-    upcomingLots: mockUpcomingLots,
-  };
-}
-
 async function fetchLotImages(client: SupabaseReadClient, lotIds: string[]) {
   if (!lotIds.length) {
     return new Map<string, LotImageRow[]>();
@@ -258,44 +251,6 @@ async function fetchLotImages(client: SupabaseReadClient, lotIds: string[]) {
   }, new Map<string, LotImageRow[]>());
 }
 
-async function fetchBids(client: SupabaseReadClient, lotIds: string[]) {
-  if (!lotIds.length) {
-    return new Map<string, BidRow[]>();
-  }
-
-  const { data, error } = await client
-    .from("bids")
-    .select("*")
-    .in("lot_id", lotIds)
-    .order("created_at", { ascending: false });
-
-  if (error || !data) {
-    if (error) {
-      console.error("[Auction data] Could not load bids:", error);
-    }
-    return new Map<string, BidRow[]>();
-  }
-
-  return data.reduce((bidsByLotId, bid) => {
-    const lotBids = bidsByLotId.get(bid.lot_id) ?? [];
-    lotBids.push(bid);
-    bidsByLotId.set(bid.lot_id, lotBids);
-    return bidsByLotId;
-  }, new Map<string, BidRow[]>());
-}
-
-async function advanceRoomLifecycles(client: SupabaseReadClient, roomIds: string[]) {
-  await Promise.all(
-    roomIds.map(async (p_room_id) => {
-      const { error } = await client.rpc("advance_room_lifecycle", { p_room_id });
-
-      if (error) {
-        throw error;
-      }
-    }),
-  );
-}
-
 async function fetchSupabaseSnapshot() {
   noStore();
   const client = createSupabaseReadClient();
@@ -315,18 +270,7 @@ async function fetchSupabaseSnapshot() {
     throwAuctionDataError("Could not load auction rooms", roomsError);
   }
 
-  if (!roomsData?.length) {
-    return null;
-  }
-
-  try {
-    await advanceRoomLifecycles(
-      client,
-      roomsData.map((room) => room.id),
-    );
-  } catch (error) {
-    throwAuctionDataError("Could not advance auction room lifecycles", error);
-  }
+  const availableRooms = roomsData ?? [];
 
   const { data: lotsData, error: lotsError } = await client
     .from("lots")
@@ -340,17 +284,11 @@ async function fetchSupabaseSnapshot() {
     throwAuctionDataError("Could not load auction lots", lotsError);
   }
 
-  if (!lotsData?.length) {
-    return null;
-  }
-
-  const roomById = new Map(roomsData.map((room) => [room.id, room]));
-  const visibleLots = lotsData.filter((lot) => roomById.has(lot.room_id));
+  const roomById = new Map(availableRooms.map((room) => [room.id, room]));
+  const visibleLots = (lotsData ?? []).filter((lot) => roomById.has(lot.room_id));
   const lotIds = visibleLots.map((lot) => lot.id);
-  const [imagesByLotId, bidsByLotId] = await Promise.all([
-    fetchLotImages(client, lotIds),
-    fetchBids(client, lotIds),
-  ]);
+  const imagesByLotId = await fetchLotImages(client, lotIds);
+  const bidsByLotId = new Map<string, BidRow[]>();
   const uiLots = visibleLots.map((lot, index) =>
     mapSupabaseLot(
       {
@@ -377,19 +315,7 @@ async function fetchSupabaseSnapshot() {
     }
   });
 
-  visibleLots.forEach((lot) => {
-    if (liveLotByRoomId.has(lot.room_id)) {
-      return;
-    }
-
-    const uiLot = uiLotById.get(lot.id);
-
-    if (uiLot) {
-      liveLotByRoomId.set(lot.room_id, uiLot);
-    }
-  });
-
-  const rooms = roomsData.map((room) => mapSupabaseRoom(room, liveLotByRoomId.get(room.id)));
+  const rooms = availableRooms.map((room) => mapSupabaseRoom(room, liveLotByRoomId.get(room.id)));
   const bidRows = Array.from(bidsByLotId.values()).flat();
   const sourceLotsById = new Map(visibleLots.map((lot) => [lot.id, lot]));
 
@@ -487,10 +413,8 @@ async function fetchSupabaseRoomAuctionState(
     ).values(),
   );
   const lotIds = sourceRows.map((lot) => lot.id);
-  const [imagesByLotId, bidsByLotId] = await Promise.all([
-    fetchLotImages(client, lotIds),
-    fetchBids(client, lotIds),
-  ]);
+  const imagesByLotId = await fetchLotImages(client, lotIds);
+  const bidsByLotId = new Map<string, BidRow[]>();
   const mappedLots = sourceRows.map((lot, index) =>
     mapSupabaseLot(
       {
@@ -522,6 +446,7 @@ async function getRoomAuctionState(
   if (supabaseState) {
     return supabaseState;
   }
+  if (!isDemoMode()) return null;
 
   const mockRoom = getMockRoomBySlug(roomSlug);
 
@@ -544,7 +469,7 @@ async function getRoomAuctionState(
 export async function getAuctionRooms() {
   noStore();
   const snapshot = await fetchSupabaseSnapshot();
-  return snapshot?.rooms.length ? snapshot.rooms : getMockAuctionRooms();
+  return snapshot ? snapshot.rooms : getMockAuctionRooms();
 }
 
 export async function getLiveLotByRoomSlug(roomSlug: string) {
@@ -572,16 +497,16 @@ export async function getLotById(lotId: string) {
 
 export async function getBidsByLotId(lotId: string) {
   noStore();
-  const client = createSupabaseReadClient();
-
-  if (!client) {
-    return [];
-  }
+  if (!createSupabaseReadClient()) return [];
+  const client = await createSupabaseServerClient();
+  const { data: { user } } = await client.auth.getUser();
+  if (!user) return [];
 
   const { data, error } = await client
     .from("bids")
     .select("*")
     .eq("lot_id", lotId)
+    .eq("bidder_id", user.id)
     .order("created_at", { ascending: false });
 
   if (error || !data) {
@@ -597,7 +522,7 @@ export async function getBidsByLotId(lotId: string) {
 export async function listLots() {
   noStore();
   const snapshot = await fetchSupabaseSnapshot();
-  return snapshot?.lots.length ? snapshot.lots : mockLots;
+  return snapshot ? snapshot.lots : mockLots;
 }
 
 export function getStaticRoomParams() {
@@ -611,9 +536,9 @@ export function getStaticLotParams() {
 export async function getHomeAuctionData() {
   noStore();
   const rooms = await getAuctionRooms();
-  const activeRoom = rooms[0] ?? getMockHomeAuctionData().activeRoom;
-  const state = await getRoomAuctionState(activeRoom.slug ?? activeRoom.id);
-  const currentLot = state?.currentLot ?? getMockHomeAuctionData().currentLot;
+  const activeRoom = rooms[0] ?? null;
+  const state = activeRoom ? await getRoomAuctionState(activeRoom.slug ?? activeRoom.id) : null;
+  const currentLot = state?.currentLot ?? null;
 
   return {
     rooms,
@@ -636,10 +561,6 @@ export async function getRoomAuctionData(roomSlug: string) {
   const state = await getRoomAuctionState(activeRoom.slug ?? activeRoom.id);
   const currentLot = state?.currentLot ?? null;
 
-  if (!currentLot) {
-    return null;
-  }
-
   return {
     rooms,
     activeRoom,
@@ -659,7 +580,6 @@ export async function getLotAuctionData(lotId: string) {
   const rooms = await getAuctionRooms();
   const activeRoom =
     rooms.find((room) => room.slug === currentLot.roomId || room.id === currentLot.roomId) ??
-    rooms[0] ??
     null;
 
   if (!activeRoom) {
@@ -674,7 +594,7 @@ export async function getLotAuctionData(lotId: string) {
   return {
     rooms,
     activeRoom,
-    currentLot,
+    currentLot: await getLotById(lotId),
     upcomingLots: state?.upcomingLots ?? [],
   };
 }

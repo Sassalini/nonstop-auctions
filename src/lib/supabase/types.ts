@@ -263,6 +263,8 @@ export type Database = {
     };
     Views: Record<string, never>;
     Functions: {
+      auction_server_time: { Args: Record<string, never>; Returns: string };
+      publish_lot: { Args: { p_lot_id: string }; Returns: LotRow };
       advance_lot: {
         Args: {
           p_lot_id: string;

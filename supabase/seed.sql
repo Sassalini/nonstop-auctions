@@ -1,5 +1,5 @@
 -- Local/test seed data. Production schema defaults remain 30s preview, 30s first bid, and 5s bid reset.
--- These deterministic records use 10s preview/first-bid windows so `supabase db reset` is useful for cycle testing.
+-- Seed timings match production. Tests backdate deadlines instead of changing auction rules.
 
 insert into auth.users (
   instance_id,
@@ -149,12 +149,12 @@ select
   starting_bid,
   case when starting_bid >= 5000 then 250 when starting_bid >= 1000 then 100 else 50 end,
   5,
-  10,
-  10,
+  30,
+  30,
   7,
   case when lot_index = 1 then 'PREVIEW' when lot_index = 5 then 'UNSOLD' else 'WAITING' end,
   case when lot_index = 1 then now() else null end,
-  case when lot_index = 1 then now() + interval '10 seconds' else null end,
+  case when lot_index = 1 then now() + interval '30 seconds' else null end,
   case when lot_index = 5 then now() else null end,
   case when lot_index = 5 then now() + interval '7 days' else now() end,
   lot_index

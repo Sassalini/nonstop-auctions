@@ -7,6 +7,7 @@ import { getMinimumAcceptedBid, isBiddingOpen } from "@/lib/auction-lifecycle";
 import { formatCurrency } from "@/lib/format";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { LotStatus } from "@/lib/supabase/types";
+import { parseBidAmount } from "@/lib/auction-clock";
 
 type BidFormProps = {
   lotId: string;
@@ -15,10 +16,6 @@ type BidFormProps = {
   minimumIncrement: number;
   auctionStatus?: LotStatus;
 };
-
-function parseBidAmount(value: string) {
-  return Number(value.replace(/[^\d.]/g, ""));
-}
 
 function getBidErrorMessage(message: string, formattedMinimum: string) {
   const normalizedMessage = message.toLowerCase();
@@ -114,6 +111,7 @@ export function BidForm({
         console.error("Bid RPC failed:", error);
         setIsError(true);
         setMessage(getBidErrorMessage(error.message, formattedMinimum));
+        startTransition(() => router.refresh());
         return;
       }
 
@@ -142,7 +140,7 @@ export function BidForm({
       <div className="flex overflow-hidden rounded-md border border-white/10 bg-black/40 transition focus-within:border-auction-gold/70">
         <input
           id="bid-amount"
-          inputMode="numeric"
+          inputMode="decimal"
           disabled={!biddingIsOpen}
           value={amount}
           onChange={(event) => setAmount(event.target.value)}

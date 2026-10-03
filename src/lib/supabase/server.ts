@@ -1,5 +1,7 @@
+import "server-only";
 import { cookies } from "next/headers";
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createServerClient } from "@supabase/ssr";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "./types";
 
 function getSupabaseConfig() {
@@ -16,16 +18,13 @@ function getSupabaseConfig() {
 export async function createSupabaseServerClient(): Promise<SupabaseClient<Database>> {
   const { supabaseUrl, supabaseAnonKey } = getSupabaseConfig();
   const cookieStore = await cookies();
-  const cookieHeader = cookieStore.toString();
-
-  return createClient<Database>(supabaseUrl, supabaseAnonKey, {
-    auth: {
-      autoRefreshToken: false,
-      detectSessionInUrl: false,
-      persistSession: false,
-    },
-    global: {
-      headers: cookieHeader ? { Cookie: cookieHeader } : {},
+  return createServerClient<Database>(supabaseUrl, supabaseAnonKey, {
+    cookies: {
+      getAll: () => cookieStore.getAll(),
+      setAll: (values) => {
+        try { values.forEach(({ name, value, options }) => cookieStore.set(name, value, options)); }
+        catch { /* Server components cannot write cookies; middleware refreshes sessions. */ }
+      },
     },
   });
 }

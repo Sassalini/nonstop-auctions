@@ -33,6 +33,8 @@ cloudflare-env.d.ts
 
 # local package cache
 .npm-cache
+test-results
+playwright-report
 
 # vercel
 .vercel

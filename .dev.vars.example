@@ -1,4 +1,2 @@
 NEXTJS_ENV=development
-NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
-AUCTION_TEST_MODE=true
+# Set Supabase public variables in .env.local for next dev and Worker preview.

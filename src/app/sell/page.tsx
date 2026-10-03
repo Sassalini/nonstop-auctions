@@ -24,7 +24,7 @@ export default function SellPage() {
     <InteriorShell
       eyebrow="Sell With Nonstop"
       title="Consign standout pieces to a premium live room."
-      description="Submit a mock valuation request and see how seller onboarding will feel once the marketplace is connected."
+      description="Seller submissions are opening soon. Explore our consignment information below."
     >
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_380px]">
         <form className="rounded-lg border border-white/10 bg-auction-panel/90 p-5 shadow-glow sm:p-6">
@@ -83,9 +83,10 @@ export default function SellPage() {
 
           <button
             type="button"
+            disabled
             className="mt-5 flex h-11 w-full items-center justify-center gap-2 rounded-md bg-auction-gold px-4 text-sm font-semibold text-black transition hover:bg-auction-goldSoft"
           >
-            Request Valuation
+            Seller submissions opening soon
             <ChevronRight size={18} strokeWidth={1.8} />
           </button>
         </form>

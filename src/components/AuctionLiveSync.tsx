@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { getLifecycleSyncDelayMs } from "@/lib/auction-sync";
+import { useAuctionClockOffset } from "@/components/AuctionClockProvider";
+import { isTimedLifecycleStatus } from "@/lib/auction-lifecycle";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { LotStatus } from "@/lib/supabase/types";
 
@@ -11,146 +12,82 @@ type AuctionLiveSyncProps = {
   lotId: string;
   status: LotStatus;
   countdownSeconds: number;
+  endsAt?: string | null;
 };
 
-export function AuctionLiveSync({
-  databaseRoomId,
-  lotId,
-  status,
-  countdownSeconds,
-}: AuctionLiveSyncProps) {
+export function AuctionLiveSync({ databaseRoomId, lotId, status, endsAt }: AuctionLiveSyncProps) {
   const router = useRouter();
   const inFlight = useRef(false);
   const [syncError, setSyncError] = useState("");
   const [, startTransition] = useTransition();
-
+  const clockOffsetMs = useAuctionClockOffset();
   const refreshAuction = useCallback(() => {
-    startTransition(() => {
-      router.refresh();
-    });
+    startTransition(() => router.refresh());
   }, [router]);
-
-  const advanceExpiredPhase = useCallback(async () => {
-    if (inFlight.current) {
-      return false;
-    }
-
-    if (!databaseRoomId) {
-      setSyncError("Live auction updates require a working Supabase connection.");
-      return true;
-    }
-
+  const recoverAuction = useCallback(async () => {
+    if (!databaseRoomId || inFlight.current) return;
     inFlight.current = true;
-
     try {
-      const supabase = createSupabaseBrowserClient();
-      const { error } = await supabase.rpc("advance_room_lifecycle", {
-        p_room_id: databaseRoomId,
-      });
-
-      if (error) {
-        console.error("Auction transition failed:", error);
-        setSyncError(`Auction transition failed: ${error.message}`);
-        return false;
-      }
-
+      // The database checks the phase and its own clock. Calling early cannot end a lot.
+      const { error } = await createSupabaseBrowserClient().rpc("advance_room_lifecycle", { p_room_id: databaseRoomId });
+      if (error) throw error;
       setSyncError("");
       refreshAuction();
-      return true;
     } catch (error) {
-      console.error("Auction transition failed:", error);
-      setSyncError(
-        error instanceof Error
-          ? `Auction transition failed: ${error.message}`
-          : "Auction transition failed. Retrying shortly.",
-      );
-      return false;
-    } finally {
-      inFlight.current = false;
-    }
+      console.error("Auction recovery failed:", error);
+      setSyncError("Live updates are temporarily unavailable. Reconnecting automatically.");
+    } finally { inFlight.current = false; }
   }, [databaseRoomId, refreshAuction]);
 
   useEffect(() => {
-    const delay = getLifecycleSyncDelayMs(status, countdownSeconds);
+    if (!databaseRoomId || !isTimedLifecycleStatus(status) || !endsAt) return;
+    const delay = Math.max(0, Date.parse(endsAt) - Date.now() - clockOffsetMs) + 150;
+    const timeout = window.setTimeout(() => { void recoverAuction(); }, Math.min(delay, 2147483647));
+    return () => window.clearTimeout(timeout);
+  }, [databaseRoomId, lotId, status, endsAt, clockOffsetMs, recoverAuction]);
 
-    if (delay === null) {
-      return;
-    }
-
+  useEffect(() => {
+    if (!databaseRoomId) return;
+    const supabase = createSupabaseBrowserClient();
     let cancelled = false;
-    let retryTimeout: number | undefined;
-
-    const runRecovery = async () => {
-      const recovered = await advanceExpiredPhase();
-
-      if (!recovered && !cancelled) {
-        retryTimeout = window.setTimeout(() => {
-          void runRecovery();
-        }, 5000);
-      }
+    let refreshTimeout: number | undefined;
+    const requestRefresh = () => {
+      if (cancelled || refreshTimeout !== undefined) return;
+      refreshTimeout = window.setTimeout(() => {
+        refreshTimeout = undefined;
+        if (!cancelled) refreshAuction();
+      }, 100);
     };
-
-    const timeout = window.setTimeout(() => {
-      void runRecovery();
-    }, delay);
-
+    const channel = supabase.channel(`auction-room-${databaseRoomId}`).on("postgres_changes", {
+      event: "*", schema: "public", table: "lots", filter: `room_id=eq.${databaseRoomId}`,
+    }, requestRefresh).subscribe((channelStatus) => {
+      if (cancelled) return;
+      if (channelStatus === "SUBSCRIBED") {
+        setSyncError("");
+        // Recover changes missed while disconnected, including an empty room becoming eligible.
+        void recoverAuction();
+      } else if (channelStatus === "CHANNEL_ERROR" || channelStatus === "TIMED_OUT") {
+        setSyncError("Live updates disconnected. Reconnecting automatically.");
+      }
+    });
+    const onVisible = () => { if (document.visibilityState === "visible") void recoverAuction(); };
+    const onOnline = () => { void recoverAuction(); };
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") void recoverAuction();
+    }, 15000);
+    window.addEventListener("online", onOnline);
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       cancelled = true;
-      window.clearTimeout(timeout);
-
-      if (retryTimeout !== undefined) {
-        window.clearTimeout(retryTimeout);
-      }
+      window.clearInterval(interval);
+      if (refreshTimeout !== undefined) window.clearTimeout(refreshTimeout);
+      window.removeEventListener("online", onOnline);
+      document.removeEventListener("visibilitychange", onVisible);
+      void supabase.removeChannel(channel);
     };
-  }, [advanceExpiredPhase, countdownSeconds, lotId, status]);
+  }, [databaseRoomId, refreshAuction, recoverAuction]);
 
-  useEffect(() => {
-    if (!databaseRoomId) {
-      return;
-    }
-
-    const supabase = createSupabaseBrowserClient();
-    const channel = supabase
-      .channel(`auction-room-${databaseRoomId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "lots",
-          filter: `room_id=eq.${databaseRoomId}`,
-        },
-        refreshAuction,
-      )
-      .subscribe((channelStatus) => {
-        if (channelStatus === "SUBSCRIBED") {
-          setSyncError("");
-        } else if (channelStatus === "CHANNEL_ERROR" || channelStatus === "TIMED_OUT") {
-          const message = "Live auction updates disconnected. Deadline recovery is still active.";
-          console.error(message);
-          setSyncError(message);
-        }
-      });
-
-    return () => {
-      void supabase.removeChannel(channel).then((removeStatus) => {
-        if (removeStatus !== "ok") {
-          console.error("Could not remove auction realtime channel:", removeStatus);
-        }
-      });
-    };
-  }, [databaseRoomId, refreshAuction]);
-
-  if (!syncError) {
-    return null;
-  }
-
-  return (
-    <div
-      role="alert"
-      className="fixed bottom-4 right-4 z-50 max-w-sm rounded-md border border-auction-danger/40 bg-black/90 px-4 py-3 text-sm text-auction-ivory shadow-2xl"
-    >
-      {syncError}
-    </div>
-  );
+  return syncError ? (
+    <div role="alert" className="fixed bottom-4 right-4 z-50 max-w-sm rounded-md border border-auction-danger/40 bg-black/90 px-4 py-3 text-sm text-auction-ivory shadow-2xl">{syncError}</div>
+  ) : null;
 }

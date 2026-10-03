@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useAuctionClockOffset } from "@/components/AuctionClockProvider";
 
 type CountdownTimerProps = {
   initialSeconds: number;
   compact?: boolean;
+  endsAt?: string | null;
 };
 
 function formatSeconds(totalSeconds: number) {
@@ -22,13 +24,17 @@ function formatSeconds(totalSeconds: number) {
     .join(":");
 }
 
-export function CountdownTimer({ initialSeconds, compact = false }: CountdownTimerProps) {
+export function CountdownTimer({ initialSeconds, compact = false, endsAt }: CountdownTimerProps) {
   const [secondsLeft, setSecondsLeft] = useState(initialSeconds);
+  const clockOffsetMs = useAuctionClockOffset();
 
   useEffect(() => {
-    const targetTime = Date.now() + Math.max(initialSeconds, 0) * 1000;
+    const parsedDeadline = endsAt ? Date.parse(endsAt) : NaN;
+    const targetTime = Number.isFinite(parsedDeadline)
+      ? parsedDeadline
+      : Date.now() + clockOffsetMs + Math.max(initialSeconds, 0) * 1000;
     const updateDisplay = () => {
-      setSecondsLeft(Math.max(0, Math.ceil((targetTime - Date.now()) / 1000)));
+      setSecondsLeft(Math.max(0, Math.ceil((targetTime - Date.now() - clockOffsetMs) / 1000)));
     };
 
     updateDisplay();
@@ -37,7 +43,7 @@ export function CountdownTimer({ initialSeconds, compact = false }: CountdownTim
     }, 250);
 
     return () => window.clearInterval(interval);
-  }, [initialSeconds]);
+  }, [initialSeconds, endsAt, clockOffsetMs]);
 
   const label = useMemo(() => formatSeconds(secondsLeft), [secondsLeft]);
 

@@ -69,7 +69,7 @@ export function AuctionRoomCard({
             </div>
             <div className="min-w-0">
               <p className="text-sm text-auction-ivory">
-                Lot {liveLot?.lotNumber ?? room.liveLotId}
+                {liveLot ? `Lot ${liveLot.lotNumber}` : "Awaiting next lot"}
               </p>
               <p className="text-sm font-semibold text-auction-ivory">
                 {formatCurrency(room.currentBid)}

@@ -1,11 +1,11 @@
 import Link from "next/link";
 import {
   Bell,
-  Menu,
   Search,
   Star,
-  UserCircle,
 } from "lucide-react";
+import { AccountMenu } from "@/components/AccountMenu";
+import { MobileNavigation } from "@/components/MobileNavigation";
 
 const navItems = [
   { href: "/", label: "Live" },
@@ -78,7 +78,8 @@ export function AppHeader() {
             <input
               id="auction-search"
               type="search"
-              placeholder="Search lots, categories, and more..."
+              placeholder="Catalogue search coming soon"
+              disabled
               className="h-full min-w-0 flex-1 bg-transparent text-sm text-auction-ivory outline-none placeholder:text-auction-muted"
             />
           </div>
@@ -87,11 +88,11 @@ export function AppHeader() {
         <div className="ml-auto flex items-center gap-1 sm:gap-2">
           <button
             type="button"
-            title="Notifications"
+            title="Notifications coming soon"
+            disabled
             className="relative hidden size-10 items-center justify-center rounded-lg text-auction-ivory transition hover:bg-white/[0.05] md:flex"
           >
             <Bell size={20} strokeWidth={1.8} />
-            <span className="absolute right-2.5 top-2.5 size-2 rounded-full bg-auction-danger" />
           </button>
           <Link
             href="/my-auctions"
@@ -100,20 +101,8 @@ export function AppHeader() {
           >
             <Star size={20} strokeWidth={1.8} />
           </Link>
-          <Link
-            href="/login"
-            className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.045] px-2.5 py-2 text-sm text-auction-ivory transition hover:border-auction-gold/40"
-          >
-            <UserCircle size={22} strokeWidth={1.8} />
-            <span className="hidden sm:inline">John Doe</span>
-          </Link>
-          <button
-            type="button"
-            title="Menu"
-            className="flex size-10 items-center justify-center rounded-lg text-auction-ivory transition hover:bg-white/[0.05] lg:hidden"
-          >
-            <Menu size={22} strokeWidth={1.8} />
-          </button>
+          <AccountMenu />
+          <MobileNavigation />
         </div>
       </div>
     </header>

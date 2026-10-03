@@ -34,7 +34,7 @@ export function BidPanel({ lot }: BidPanelProps) {
             </p>
             <div className="mt-2">
               {showTimer ? (
-                <CountdownTimer initialSeconds={lot.countdownSeconds} />
+                <CountdownTimer key={lot.id} initialSeconds={lot.countdownSeconds} endsAt={lot.endsAt} />
               ) : (
                 <p className="text-sm font-semibold text-auction-ivory">{timerLabel}</p>
               )}

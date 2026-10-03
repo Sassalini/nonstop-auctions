@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { ChevronRight, Eye, Heart } from "lucide-react";
+import { ChevronRight, Eye } from "lucide-react";
+import { WatchLotButton } from "@/components/WatchLotButton";
 import { AuctionStatusBadge } from "@/components/AuctionStatusBadge";
 import { BidPanel } from "@/components/BidPanel";
 import { LotImageGallery } from "@/components/LotImageGallery";
@@ -37,7 +38,7 @@ export function LiveLotPanel({ room, lot }: LiveLotPanelProps) {
         </div>
       </div>
 
-      <LotImageGallery lot={lot} />
+      <LotImageGallery key={lot.id} lot={lot} />
 
       <div className="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1fr)_460px]">
         <section className="rounded-lg border border-white/10 bg-black/[0.72] p-4 shadow-inner shadow-black/20 backdrop-blur-sm sm:p-5">
@@ -52,13 +53,7 @@ export function LiveLotPanel({ room, lot }: LiveLotPanelProps) {
               </p>
               <p className="mt-1 text-sm text-auction-muted">{lot.maker}</p>
             </div>
-            <button
-              type="button"
-              className="flex h-10 shrink-0 items-center gap-2 rounded-md border border-white/10 px-3 text-sm text-auction-ivory transition hover:border-auction-gold/60 hover:text-auction-gold"
-            >
-              <Heart size={17} strokeWidth={1.8} />
-              Watch
-            </button>
+            <WatchLotButton key={lot.id} lotId={lot.id} enabled={Boolean(room.databaseId)} />
           </div>
         </section>
 

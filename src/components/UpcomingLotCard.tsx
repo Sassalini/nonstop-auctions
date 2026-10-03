@@ -56,7 +56,7 @@ export function UpcomingLotCard({ lot }: UpcomingLotCardProps) {
           <p className="mt-1 text-xs text-auction-muted">Unavailable until {unavailableUntil}</p>
         ) : showTimer ? (
           <p className="mt-1 text-xs text-auction-muted">
-            {timerLabel} <CountdownTimer initialSeconds={lot.countdownSeconds} compact />
+            {timerLabel} <CountdownTimer key={lot.id} initialSeconds={lot.countdownSeconds} endsAt={lot.endsAt} compact />
           </p>
         ) : (
           <p className="mt-1 text-xs text-auction-muted">{statusLabel}</p>

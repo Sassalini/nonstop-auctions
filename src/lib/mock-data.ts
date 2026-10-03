@@ -235,9 +235,7 @@ const roomDefinitions: RoomDefinition[] = [
   },
 ];
 
-const testSpeedEnabled =
-  process.env.NODE_ENV === "development" || process.env.AUCTION_TEST_MODE === "true";
-const previewSeconds = testSpeedEnabled ? 10 : 30;
+const previewSeconds = 30;
 const returnedToQueueAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
 function buildMockLot(

@@ -4,7 +4,7 @@ import { UpcomingLotCard } from "@/components/UpcomingLotCard";
 import type { AuctionRoom, Lot } from "@/lib/auction-data";
 
 type UpcomingLotsSidebarProps = {
-  room: AuctionRoom;
+  room: AuctionRoom | null;
   lots: Lot[];
   className?: string;
 };
@@ -21,7 +21,7 @@ export function UpcomingLotsSidebar({
       <div className="mb-4 flex items-center justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-sm font-semibold text-auction-ivory">Up Next</h2>
-          <p className="mt-0.5 truncate text-xs text-auction-muted">{room.name}</p>
+          <p className="mt-0.5 truncate text-xs text-auction-muted">{room?.name ?? "Live auctions"}</p>
         </div>
         <button
           type="button"
@@ -35,7 +35,7 @@ export function UpcomingLotsSidebar({
         </button>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-1">
+      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-1">
         {lots.length ? (
           lots.map((lot) => <UpcomingLotCard key={lot.id} lot={lot} />)
         ) : (
@@ -48,13 +48,13 @@ export function UpcomingLotsSidebar({
         )}
       </div>
 
-      <Link
+      {room ? <Link
         href={`/rooms/${room.id}`}
         className="mt-4 flex h-11 items-center justify-center gap-2 rounded-md border border-auction-gold/60 text-sm font-semibold text-auction-gold transition hover:bg-auction-gold hover:text-black"
       >
         <ListFilter size={18} strokeWidth={1.8} />
         View Full Catalogue
-      </Link>
+      </Link> : null}
     </aside>
   );
 }

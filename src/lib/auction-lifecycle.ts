@@ -89,10 +89,10 @@ export function getMinimumAcceptedBid({
   startingBid?: number;
 }) {
   if (auctionStatus === "FIRST_BID_WINDOW") {
-    return Math.max(currentBid, startingBid ?? currentBid);
+    return Math.max(0.01, currentBid, startingBid ?? currentBid);
   }
 
-  return currentBid + minimumIncrement;
+  return Math.round((currentBid + minimumIncrement + Number.EPSILON) * 100) / 100;
 }
 
 export function formatShortDateTime(value: string | null | undefined) {
@@ -105,5 +105,6 @@ export function formatShortDateTime(value: string | null | undefined) {
     hour: "2-digit",
     minute: "2-digit",
     month: "short",
+    timeZone: "Europe/London",
   }).format(new Date(value));
 }

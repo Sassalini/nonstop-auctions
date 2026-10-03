@@ -4,17 +4,31 @@ import { ArrowUpRight, Clock, Eye, Star } from "lucide-react";
 import { InteriorShell } from "@/components/InteriorShell";
 import { formatCurrency, formatEstimate } from "@/lib/format";
 import { listLots } from "@/lib/auction-data";
+import { redirect } from "next/navigation";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { formatShortDateTime } from "@/lib/auction-lifecycle";
 
 export const dynamic = "force-dynamic";
 
 export default async function MyAuctionsPage() {
-  const watchedLots = (await listLots()).slice(0, 5);
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) redirect("/login");
+  const supabase = await createSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login?next=/my-auctions");
+  const [{ data: watchlist, error: watchError }, { data: bids, error: bidError }] = await Promise.all([
+    supabase.from("watchlist").select("lot_id").eq("user_id", user.id),
+    supabase.from("bids").select("amount").eq("bidder_id", user.id).order("amount", { ascending: false }).limit(1),
+  ]);
+  if (watchError || bidError) throw new Error("Could not load your auction account.");
+  const watchedIds = new Set((watchlist ?? []).map(item => item.lot_id));
+  const watchedLots = watchedIds.size ? (await listLots()).filter(lot => watchedIds.has(lot.id)) : [];
+  const nextDeadline = watchedLots.filter(lot => ["PREVIEW", "FIRST_BID_WINDOW", "ACTIVE_BIDDING"].includes(lot.auctionStatus)).map(lot => lot.endsAt).filter((value): value is string => Boolean(value)).sort()[0];
 
   return (
     <InteriorShell
       eyebrow="Private Desk"
       title="Track bids, watched lots, and seller activity."
-      description="A mock account surface for bidders and consignors, styled for quick scanning during live auctions."
+      description="Your watched lots and bid activity, together in one place."
     >
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
         <section className="overflow-hidden rounded-lg border border-white/10 bg-auction-panel/90 shadow-glow">
@@ -33,6 +47,7 @@ export default async function MyAuctionsPage() {
           </div>
 
           <div className="divide-y divide-white/10">
+            {!watchedLots.length ? <p className="p-5 text-sm text-auction-muted">You are not watching any available lots yet.</p> : null}
             {watchedLots.map((lot) => (
               <Link
                 href={`/lots/${lot.id}`}
@@ -75,8 +90,8 @@ export default async function MyAuctionsPage() {
         <aside className="space-y-3">
           <section className="rounded-lg border border-white/10 bg-auction-panel/80 p-5">
             <Clock className="text-auction-ember" size={24} strokeWidth={1.8} />
-            <p className="mt-4 text-sm text-auction-muted">Next closing lot</p>
-            <p className="mt-1 text-2xl font-semibold text-auction-ivory">00:00:45</p>
+            <p className="mt-4 text-sm text-auction-muted">Next watched deadline</p>
+            <p className="mt-1 text-lg font-semibold text-auction-ivory">{nextDeadline ? formatShortDateTime(nextDeadline) : "No active watched lots"}</p>
           </section>
           <section className="rounded-lg border border-white/10 bg-auction-panel/80 p-5">
             <Eye className="text-auction-gold" size={24} strokeWidth={1.8} />
@@ -85,9 +100,9 @@ export default async function MyAuctionsPage() {
           </section>
           <section className="rounded-lg border border-white/10 bg-auction-panel/80 p-5">
             <Star className="text-auction-gold" size={24} strokeWidth={1.8} />
-            <p className="mt-4 text-sm text-auction-muted">Highest active bid</p>
+            <p className="mt-4 text-sm text-auction-muted">Your highest bid</p>
             <p className="mt-1 text-2xl font-semibold text-auction-ivory">
-              {formatCurrency(12500)}
+              {bids?.length ? formatCurrency(Number(bids[0].amount)) : "No bids yet"}
             </p>
           </section>
         </aside>

@@ -5,7 +5,7 @@ select set_config('app.auction_lifecycle', 'true', true);
 do $$
 declare
   test_room_id uuid;
-  test_bidder_id uuid := '00000000-0000-0000-0000-000000000101';
+  test_bidder_id uuid := '00000000-0000-0000-0000-000000000102';
   first_lot_id uuid;
   second_lot_id uuid;
   third_lot_id uuid;
@@ -15,6 +15,9 @@ declare
   rejected boolean;
   duplicate_active_blocked boolean := false;
 begin
+  insert into auth.users (id, aud, role, email, email_confirmed_at, raw_user_meta_data)
+  values (test_bidder_id, 'authenticated', 'authenticated', 'auction-test-bidder@nonstop.local', now(), '{}'::jsonb)
+  on conflict (id) do nothing;
   select id
   into test_room_id
   from public.auction_rooms
@@ -63,7 +66,7 @@ begin
     ends_at = null,
     sold_at = null,
     unsold_at = null,
-    next_eligible_at = clock_timestamp()
+    next_eligible_at = clock_timestamp() - interval '1 day'
   where room_id = test_room_id;
 
   update public.lots
@@ -114,7 +117,9 @@ begin
     raise exception 'An equal active bid was not rejected.';
   end if;
 
-  previous_deadline := first_lot.ends_at;
+  -- Leave elapsed time before the reset, without relying on the clock's resolution.
+  update public.lots set ends_at = ends_at - interval '1 second'
+  where id = first_lot_id returning ends_at into previous_deadline;
   expected_increment := first_lot.minimum_increment;
 
   select *
