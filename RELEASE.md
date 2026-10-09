@@ -21,6 +21,8 @@ No service-role key is required by the website. Cron executes a restricted datab
 
 ## Database rollout
 
+If migration 005 reports an existing constraint or other duplicate object, stop rather than rerunning it. Use `supabase/operations/check_migration_005.sql` to inspect the actual state, then follow `supabase/operations/MIGRATION_005_RECOVERY.md`. The separate idempotent recovery script preserves production rows and refuses conflicting objects; the original migration remains unchanged.
+
 1. Take a database backup and pause auction traffic/any existing auction scheduler for the migration window. Avoid accepting bids during schema changes.
 2. Confirm migrations `001` through `004` have been applied exactly once in order. Do not rerun older migrations: they contain superseded function definitions and migration 003 repairs duplicate active state.
 3. Run `supabase/operations/release_preflight.sql` as the database owner. Review invalid amounts/results before proceeding. Existing invalid records make migration 005 fail for manual review; it does not fabricate winners or delete bids.

@@ -1,0 +1,87 @@
+# Non-Stop Auctions: release security review
+
+Reviewed 8 October 2026. No hosted data, database definitions, policies, grants, scheduler settings, or application code were changed. The proposed migration is saved outside the migrations directory and has not been applied to Supabase.
+
+The remaining preflight WARN is intentionally emitted whenever policy definitions exist: it requests manual review. Eleven PASS results therefore do not certify the policy expressions, function execution privileges, Storage configuration, or scheduled processing.
+
+**Conclusion:** migration 005's public-table policies and column grants protect direct bidding/deadline writes and owner-controlled drafts, images, profiles and watchlists. One lifecycle execution grant contradicts the requested release boundary. There is also a public identity-column exposure that contradicts the release notes' privacy claim. The hosted catalogue contains seeded records with a seed account whose current credential safety needs verification. Storage and Cron cannot be certified from the available anonymous connection.
+
+**Evidence and limits**
+
+- Reviewed migrations 001–005 in order, the separate migration-005 recovery scripts, scheduler operation, seed, and application lifecycle callers. Earlier definitions in 001–004 are superseded by 005; rerunning an old migration could restore older permissions or weaker function bodies.
+- Ran 15 local PostgreSQL checks using disposable PGlite databases. These include existing bidding/lifecycle integration tests, owner-policy tests, reproduction of anonymous lifecycle mutation, verification of the proposed execution restriction, and read-only execution of the new inventory query. All passed. These are not hosted concurrency, hosted Auth or Storage tests.
+- Used only the configured public Supabase key for hosted REST GET/SELECT requests. No sign-in, write request, bidding RPC or lifecycle RPC was performed on the hosted project. All 60 visible lots were returned (`0-59/60`), so the anonymous result was not truncated. Owner-only drafts and inactive-room records, if any, are outside that anonymous view.
+- Anonymous hosted reads of `bids`, `profiles` and `watchlist` returned HTTP 401; reading `lots.seller_id` and `lots.highest_bidder_id` returned HTTP 200.
+- The browser inspection process was unavailable. There is no connected privileged SQL session available here. Consequently the live policy expressions, inherited grants, function bodies, private Storage settings and Cron state remain unverified. The supplied preflight totals cannot replace that inspection. The configured hosted project matches the reported 60 UNSOLD lots, but production hosting environment settings were not independently compared.
+
+**Actual findings and required follow-up**
+
+1. **Medium — ordinary users can invoke a mutating lifecycle RPC.** Migration 005 line 301 explicitly grants `public.advance_room_lifecycle(uuid)` to `anon` and `authenticated`. It runs as SECURITY DEFINER, locks an active room, and can start previews, move expired phases to UNSOLD/SOLD, assign queue positions and deadlines, and start the next lot. An anonymous caller caused an expired local lot to become UNSOLD in the reproduction. This violates the requirement that lifecycle functions cannot be executed by ordinary users, including the requirement that unauthenticated users cannot modify auction data. Database-clock checks prevent arbitrary early closure or caller-supplied deadlines; no such bypass was found. Repeated public calls can nevertheless consume locks and database work. Hosted execute access still needs catalogue confirmation.
+
+   The draft `supabase/proposals/006_restrict_lifecycle_execution.sql` revokes all five lifecycle entry points from PUBLIC, anon and authenticated, retains trusted room/all-room execution for service_role, and aborts if inherited privileges still allow ordinary-user execution. It changes permissions only. It was validated exclusively in a disposable local database.
+
+   **Deployment dependency:** `src/components/AuctionLiveSync.tsx:32` and `src/lib/auction-data.ts:362` currently call the room RPC with public/user credentials. Applying the proposal alone causes permission errors; the server read path currently throws on such errors. First coordinate an application change to read-only catalogue/Realtime refreshes and verify a working Cron or trusted server lifecycle processor. The database owner can continue invoking functions, and the existing Cron all-room function remains available to service_role. No application changes were made in this review.
+
+2. **Medium privacy concern — stable identity columns are public.** Migration 005 line 74 grants SELECT on the whole `lots` table to anon and authenticated. Visible lots therefore expose `seller_id` and `highest_bidder_id`; a live anonymous column-read request succeeded. Current UNSOLD lots have no recorded highest bidder, but the permission will expose a leader UUID when bidding occurs. This does not expose passwords, emails, profiles or private bid history. It does permit correlation of a user's bids across visible lots. The statement in RELEASE.md that bidder identities are restricted to the bidder is too broad.
+
+   If leader identifiers must be private, plan a separate public-catalogue interface excluding these columns, with owner-scoped private access and safe RPC return shapes. Explicitly update existing SELECT `*` consumers. Do not simply revoke all access to identity columns without reviewing dependent image-owner policy subqueries and the authenticated catalogue path. No blanket privacy SQL was proposed because it would need those coordinated changes to preserve seller/image access. Otherwise document explicitly that leader UUIDs are public.
+
+3. **Seed-account risk — confirmed seed-owned hosted catalogue, credential validity unverified.** All 60 visible lot IDs follow the seed pattern and reference the seed seller UUID from `supabase/seed.sql`. That file creates an email-confirmed Auth account using a publicly known test password and seeds ownership/record IDs. I did not attempt to sign in or read Auth credentials. These reads cannot establish whether that password has already been changed. If this is production and the seed account still accepts the seed password, an outsider could control that account, including editing any of its own remaining drafts or publishing new lots. The existing UNSOLD lots remain protected against catalogue edits by the draft-only policy, and seller self-bidding is rejected. Confirm the account has been secured before release; account remediation is a separate approved administrative action. Do not reset, delete or reassign the 60 lots merely to resolve this review.
+
+4. **Storage verification gap — no upload policy is supplied.** No repository migration creates Storage buckets or policies on `storage.objects`; RELEASE.md explicitly excludes seller uploads from this release. Missing upload policies alone are not an open-upload vulnerability: Supabase denies uploads by default. Dashboard-created policies may differ and were not accessible to this review. The public-schema policy warning does not audit Storage. Before enabling uploads, review the actual bucket, INSERT/UPDATE/DELETE policies and object names; enforce authenticated seller ownership of a permitted draft and bucket/path restrictions, including both old/new checks for overwrite or move operations. Object ownership metadata by itself does not authorize access. Ensure a seller cannot replace/delete another seller's object or modify the image behind a published lot. Review MIME/size restrictions as well. No bucket name or permissive policy was invented for a speculative fix.
+
+**All public-schema policies after migration 005**
+
+There are 15 expected policies across six public tables. All are permissive policies; within a command, extra permissive policies can expand access. This review approves the repository definitions below, not unknown additional hosted policies. The new read-only inventory and the existing migration-005 comparison identify actual hosted definitions for review.
+
+| Table / policy | Role and command | USING / WITH CHECK and conclusion |
+| --- | --- | --- |
+| `auction_rooms` / Anyone can read active auction rooms | anon, authenticated / SELECT | USING `is_active = true`. Public active-room catalogue; no client write grants or write policy. |
+| `lots` / Anyone can read non-draft lots | anon, authenticated / SELECT | USING owner OR non-DRAFT in an active room. Anonymous callers cannot satisfy the owner branch. Public reads include identity columns as noted above. |
+| `lots` / Sellers can create their own lots | authenticated / INSERT | WITH CHECK seller = auth.uid(), DRAFT, zero bid count/current bid, no bidder/winner/result/deadline/phase fields, queue position zero, not premium, active room. Column grants additionally prevent supplying state/timing fields. |
+| `lots` / Sellers can update draft or waiting lots | authenticated / UPDATE | Both USING and WITH CHECK require seller = auth.uid() and DRAFT. Despite the old name, WAITING is not editable. Only catalogue columns are granted; seller/id/bid/deadline/queue/timing columns cannot be directly updated. |
+| `lot_images` / Anyone can read images for visible lots | anon, authenticated / SELECT | USING existence of a parent lot subject to its own RLS. No draft-image access for other users. |
+| `lot_images` / Sellers can add draft images | authenticated / INSERT | WITH CHECK parent lot is caller's own DRAFT. |
+| `lot_images` / Sellers can edit draft images | authenticated / UPDATE | Both USING and WITH CHECK require caller's own DRAFT parent. UPDATE is limited to image_url, alt_text and sort_order; lot_id cannot be reassigned. |
+| `lot_images` / Sellers can remove draft images | authenticated / DELETE | USING caller's own DRAFT parent. Published/other-owner image records cannot be deleted. These checks protect metadata, not Storage bytes or arbitrary external image URLs. |
+| `bids` / Users can read their own bids | authenticated / SELECT | USING bidder_id = auth.uid(). No client INSERT/UPDATE/DELETE grant; the older public-read and direct-insert policies are removed. |
+| `profiles` / Users can read their own profile | authenticated / SELECT | USING id = auth.uid(). |
+| `profiles` / Users can create their own profile | authenticated / INSERT | WITH CHECK id = auth.uid(). Cannot create another user's profile. The signup trigger also provisions profiles. |
+| `profiles` / Users can update their own profile | authenticated / UPDATE | Both USING and WITH CHECK id = auth.uid(). Only display_name/avatar_url updates are granted. No owner-ID change or delete grant. |
+| `watchlist` / Users can read their own watchlist | authenticated / SELECT | USING user_id = auth.uid(). |
+| `watchlist` / Users can add their own watchlist items | authenticated / INSERT | WITH CHECK user_id = auth.uid(). Other-owner rows cannot be inserted. |
+| `watchlist` / Users can remove their own watchlist items | authenticated / DELETE | USING user_id = auth.uid(). No UPDATE grant/policy. |
+
+The release revokes table privileges on all six tables before granting the intended operations. The protected lot-state trigger is additional defence: a client cannot bypass it by setting `app.place_bid` or `app.auction_lifecycle`, because the bypass also checks the executing database role. Effective hosted table/column permissions must still be audited for PUBLIC grants, inherited permissions or pre-existing custom column grants; the summary does not inspect those.
+
+**RPC review**
+
+`place_bid` in migration 005 lines 211–250 is restricted to authenticated callers, uses `auth.uid()` rather than a supplied bidder ID, requires an email-confirmed user, rejects self-bids, and rejects null, non-finite, non-positive, excessively large or fractional-penny amounts. It locks the active room before the lot, checks room/status consistency, then samples the database clock after acquiring locks. Bids are rejected at or after the stored deadline. The first bid must meet max(starting_bid, 0.01); later bids must meet current_bid + minimum_increment. A valid bid records the bidder/amount and atomically sets the five-second deadline. SECURITY DEFINER uses an explicitly empty search_path and schema-qualified application relations. Local tests found no direct-write or bidding-rule bypass. Multi-connection concurrency remains a staging check because PGlite is single-connection.
+
+`publish_lot` is an intentional seller RPC, not an unrestricted lifecycle endpoint: it is granted to authenticated users, verifies own DRAFT, verified email and active room, rechecks ownership/room/status after locking, and assigns the queue position server-side. `start_next_lot_preview_at`, `start_next_lot_preview`, `advance_lot` and `advance_all_auction_rooms` deny ordinary-user execution in 005. The room RPC is the exception described above. `auction_server_time` only reads the server clock. Protection/profile trigger functions are not executable by ordinary users.
+
+**Why there are 60 UNSOLD lots and what happens next**
+
+At the hosted read observation of **8 October 2026, 23:49:04 BST** (22:49:04 UTC):
+
+- 60 visible lots were UNSOLD, spread five each across 12 active rooms; no current PREVIEW/FIRST_BID_WINDOW/ACTIVE_BIDDING lot was visible.
+- All 60 had `bid_count = 0`, a non-null `unsold_at`, and a non-null `next_eligible_at` exactly seven days later. Zero were currently eligible; all 60 were waiting for eligibility.
+- `unsold_at` values span **2 October, 17:58:56–18:00:17 BST**. Eligibility spans **9 October, 17:58:56–18:00:17 BST**.
+- Every visible lot matches a seed-pattern ID and the seed seller. The seed itself creates 12 UNSOLD lots, 12 PREVIEW lots and 36 WAITING lots. Thus the full count of 60 is not the seed's initial status distribution: the timestamps and zero bid counts are consistent with all seed lots passing through no-bid cycles. Per-room completion times are 20 seconds apart, consistent with earlier short test timing; this is an inference, not a reconstruction of scheduler logs. Migration 005 deliberately preserves old deadline/result timestamps.
+
+**Yes: all 60 should be eligible after their individual seven-day dates.** This is a queued eligibility condition, not a promise that every lot begins at exactly that time. The lifecycle selects WAITING/UNSOLD records in the same active room where next_eligible_at is due, ordered by queue_position, created_at and id. A room can have one current lot; other eligible lots wait. Starting a preview resets the current bidding state and clears the previous unsold result. No manual conversion to WAITING and no deadline rewrite is needed.
+
+If a working scheduled processor is present, it should pick these up automatically when due. A browser or server page request can currently also trigger the room RPC. After the proposed access restriction, those public callers must no longer drive transitions. Cron job existence, active status and recent success were not visible through anonymous REST; check them before approving the permission change. If all lots remain UNSOLD after eligibility, inspect scheduler execution, errors and active-room availability rather than resetting data.
+
+**Approval package and remaining read-only verification**
+
+- `supabase/proposals/006_restrict_lifecycle_execution.sql`: permission-only proposal, outside automatic migration discovery. **Do not apply without approval and coordinated application/scheduler changes.**
+- `supabase/operations/release_security_inventory.sql`: a single read-only grid of actual public/storage policies, RLS flags, effective table/column/function access, bucket settings, UNSOLD dates and Cron catalogue availability. Its optional commented Cron SELECTs inspect job settings/history without executing jobs.
+- `supabase/operations/check_migration_005.sql`: existing read-only comparison of policy/function definitions, grants and other release objects. After a deliberate grant change, old manifest expectations will differ and should be updated in the future approved implementation.
+- `tests/release-security-review.test.mjs`: local reproductions and proposal/inventory validation. Along with database.test.mjs, 15 tests passed. No production write tests were attempted.
+
+To finish hosted sign-off, review the inventory and migration comparison outputs for unexpected/changed policies, effective ordinary-user lifecycle privileges, Storage object permissions and scheduler state. Verify the seed account has no usable known test credential. Retain the policy warning until these live checks are reviewed; do not turn it into PASS merely to make the summary green.
+
+**Reference documentation**
+
+Supabase explains that SECURITY DEFINER RPCs require both explicit caller restrictions and checks inside the function; RLS alone does not constrain their privileged execution: [Database functions](https://supabase.com/docs/guides/database/functions). [Row Level Security](https://supabase.com/docs/guides/database/postgres/row-level-security) covers policy roles, USING and WITH CHECK. [Storage access control](https://supabase.com/docs/guides/storage/security/access-control) documents default-denied uploads and separate policies for overwrite operations; [Storage ownership](https://supabase.com/docs/guides/storage/security/ownership) explains that ownership metadata does not itself grant access.
