@@ -33,6 +33,7 @@ export function WatchLotButton({ lotId, enabled }: { lotId: string; enabled: boo
         : await supabase.from("watchlist").insert({ user_id: user.id, lot_id: lotId });
       if (error) { setMessage("Could not update your watchlist. Please try again."); return; }
       setWatched(!watched);
+      window.dispatchEvent(new CustomEvent("auction-watchlist-changed", { detail: lotId }));
     } catch { setMessage("Could not update your watchlist. Please try again."); }
     finally { setBusy(false); }
   }

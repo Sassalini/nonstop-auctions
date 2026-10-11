@@ -47,7 +47,6 @@ export function BidPanel({ lot }: BidPanelProps) {
             <p className="mt-2 whitespace-nowrap text-lg font-semibold text-auction-ivory">
               {lot.bidCount} bids
             </p>
-            <p className="whitespace-nowrap text-sm text-auction-muted">{lot.watchers} watching</p>
           </div>
         </div>
 

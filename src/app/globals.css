@@ -42,6 +42,7 @@ body {
   background-position: center;
   background-repeat: no-repeat;
   background-size: cover;
+  filter: brightness(1.05);
 }
 
 .site-background-overlay {

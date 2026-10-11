@@ -92,6 +92,18 @@ export type WatchlistRow = {
   created_at: string;
 };
 
+export type NotificationKind = "WATCHED_LIVE" | "WATCHED_SOLD" | "WATCHED_UNSOLD" | "WON" | "SELLER_LIVE" | "SELLER_SOLD";
+export type NotificationRow = {
+  id: string;
+  user_id: string;
+  lot_id: string;
+  kind: NotificationKind;
+  lot_title: string;
+  auction_run: string;
+  created_at: string;
+  read_at: string | null;
+};
+
 type TableDefinition<Row, Insert, Update> = {
   Row: Row;
   Insert: Insert;
@@ -102,6 +114,7 @@ type TableDefinition<Row, Insert, Update> = {
 export type Database = {
   public: {
     Tables: {
+      notifications: TableDefinition<NotificationRow, never, { read_at?: string | null }>;
       profiles: TableDefinition<
         ProfileRow,
         {
@@ -263,6 +276,7 @@ export type Database = {
     };
     Views: Record<string, never>;
     Functions: {
+      lot_watchlist_count: { Args: { p_lot_id: string }; Returns: number };
       auction_server_time: { Args: Record<string, never>; Returns: string };
       publish_lot: { Args: { p_lot_id: string }; Returns: LotRow };
       advance_lot: {

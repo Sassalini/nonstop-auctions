@@ -3,7 +3,9 @@ import { PGlite } from '@electric-sql/pglite';
 import { pgcrypto } from '@electric-sql/pglite/contrib/pgcrypto';
 
 // Local PostgreSQL only. No hosted connection or environment credentials.
-export async function releaseDatabase({ release = true } = {}) {
+// Older release-audit/recovery tests intentionally exercise the 004/005 snapshot.
+// Feature tests can explicitly opt into later numbered migrations.
+export async function releaseDatabase({ release = true, throughMigration = release ? 5 : 4 } = {}) {
   const db = new PGlite({ extensions: { pgcrypto } });
   await db.exec(`
     create role anon; create role authenticated; create role service_role bypassrls;
@@ -19,7 +21,7 @@ export async function releaseDatabase({ release = true } = {}) {
   `);
   const directory = new URL('../../supabase/migrations/', import.meta.url);
   for (const file of (await readdir(directory)).sort()) {
-    if (!file.endsWith('.sql') || (!release && file.startsWith('005'))) continue;
+    if (!file.endsWith('.sql') || Number(file.slice(0, 3)) > throughMigration) continue;
     await db.exec(await readFile(new URL(file, directory), 'utf8'));
   }
   await db.exec(await readFile(new URL('../../supabase/seed.sql', import.meta.url), 'utf8'));

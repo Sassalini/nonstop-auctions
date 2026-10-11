@@ -30,7 +30,6 @@ export type Lot = {
   startingBid: number;
   currentBid: number;
   bidCount: number;
-  watchers: number;
   countdownSeconds: number;
   minimumIncrement: number;
   startsIn: string;
@@ -268,7 +267,6 @@ function buildMockLot(
     startingBid: definition.startingBid,
     currentBid: definition.startingBid,
     bidCount: 0,
-    watchers: 18 + roomIndex * 4 + lotIndex * 3,
     countdownSeconds,
     minimumIncrement,
     startsIn: auctionStatus === "PREVIEW" ? `00:${String(previewSeconds).padStart(2, "0")}` : auctionStatus === "UNSOLD" ? "7 days" : "Queued",

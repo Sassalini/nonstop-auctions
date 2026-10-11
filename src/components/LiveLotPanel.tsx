@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { ChevronRight, Eye } from "lucide-react";
+import { ChevronRight } from "lucide-react";
+import { LotAudience } from "@/components/LotAudience";
 import { WatchLotButton } from "@/components/WatchLotButton";
 import { AuctionStatusBadge } from "@/components/AuctionStatusBadge";
 import { BidPanel } from "@/components/BidPanel";
@@ -26,15 +27,12 @@ export function LiveLotPanel({ room, lot }: LiveLotPanelProps) {
           <ChevronRight size={15} strokeWidth={1.8} />
           <span className="truncate text-auction-ivory">{room.category}</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <AuctionStatusBadge
             status={getLotBadgeVariant(lot.auctionStatus)}
             label={statusLabel}
           />
-          <span className="flex h-7 items-center gap-1 rounded-md border border-white/10 bg-white/[0.04] px-2.5 text-xs text-auction-ivory">
-            <Eye size={15} strokeWidth={1.8} />
-            {lot.watchers}
-          </span>
+          <LotAudience key={lot.id} lotId={lot.id} enabled={Boolean(room.databaseId)} />
         </div>
       </div>
 

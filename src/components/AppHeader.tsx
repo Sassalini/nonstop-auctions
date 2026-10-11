@@ -1,14 +1,11 @@
 import Link from "next/link";
-import {
-  Bell,
-  Search,
-  Star,
-} from "lucide-react";
+import { Search, Star } from "lucide-react";
 import { AccountMenu } from "@/components/AccountMenu";
 import { MobileNavigation } from "@/components/MobileNavigation";
+import { LiveNavigationLink } from "@/components/LiveNavigationLink";
+import { AccountNotifications } from "@/components/AccountNotifications";
 
 const navItems = [
-  { href: "/", label: "Live" },
   { href: "/sell", label: "Sell" },
   { href: "/my-auctions", label: "My Auctions" },
 ];
@@ -58,6 +55,7 @@ export function AppHeader() {
         </Link>
 
         <nav className="hidden items-center gap-1 lg:flex">
+          <LiveNavigationLink className="whitespace-nowrap rounded-md px-3 py-2 text-sm text-auction-muted transition hover:bg-white/[0.04] hover:text-auction-ivory" />
           {navItems.map((item) => (
             <Link
               key={item.href}
@@ -86,14 +84,7 @@ export function AppHeader() {
         </form>
 
         <div className="ml-auto flex items-center gap-1 sm:gap-2">
-          <button
-            type="button"
-            title="Notifications coming soon"
-            disabled
-            className="relative hidden size-10 items-center justify-center rounded-lg text-auction-ivory transition hover:bg-white/[0.05] md:flex"
-          >
-            <Bell size={20} strokeWidth={1.8} />
-          </button>
+          <AccountNotifications />
           <Link
             href="/my-auctions"
             title="Watchlist"

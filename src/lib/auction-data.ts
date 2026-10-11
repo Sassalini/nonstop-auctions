@@ -1,11 +1,11 @@
 import { unstable_noStore as noStore } from "next/cache";
 import { getAuctionDataMode } from "@/lib/auction-mode";
+import type { LiveLotCandidate } from "@/lib/live-viewers";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { formatShortDateTime, getLotStatusLabel } from "@/lib/auction-lifecycle";
 import {
   auctionRooms as mockAuctionRooms,
-  getLiveLotForRoom as getMockLiveLotForRoom,
   getLotById as getMockLotById,
   getRoomLots as getMockRoomLots,
   lots as mockLots,
@@ -183,7 +183,6 @@ function mapSupabaseLot(bundle: SupabaseLotBundle, lotNumber: number): Lot {
     startingBid,
     currentBid,
     bidCount: toNumber(lot.bid_count, bids.length),
-    watchers: 0,
     countdownSeconds: getSecondsUntil(getLotCountdownTarget(lot), lot.preview_duration_seconds),
     minimumIncrement,
     startsIn: formatStartsIn(lot),
@@ -454,8 +453,8 @@ async function getRoomAuctionState(
     return null;
   }
 
-  const currentLot = getMockLiveLotForRoom(mockRoom.id);
-  const excludedId = excludeLotId ?? currentLot.id;
+  const currentLot = mockRoom.liveLot ?? null;
+  const excludedId = excludeLotId ?? currentLot?.id;
 
   return {
     currentLot,
@@ -470,6 +469,23 @@ export async function getAuctionRooms() {
   noStore();
   const snapshot = await fetchSupabaseSnapshot();
   return snapshot ? snapshot.rooms : getMockAuctionRooms();
+}
+
+// Read-only: navigation never calls lifecycle or bidding functions.
+export async function getActiveLotCandidates(): Promise<LiveLotCandidate[]> {
+  noStore();
+  const client = createSupabaseReadClient();
+  if (!client) return [];
+  const [{ data: rooms, error: roomError }, { data: lots, error: lotError }] = await Promise.all([
+    client.from("auction_rooms").select("id,slug,display_order").eq("is_active", true),
+    client.from("lots").select("id,room_id").in("status", currentLotStatuses),
+  ]);
+  if (roomError || lotError) throwAuctionDataError("Could not load live navigation", roomError ?? lotError);
+  const byId = new Map((rooms ?? []).map((room) => [room.id, room]));
+  return (lots ?? []).flatMap((lot) => {
+    const room = byId.get(lot.room_id);
+    return room ? [{ id: lot.id, roomSlug: room.slug, roomOrder: room.display_order }] : [];
+  });
 }
 
 export async function getLiveLotByRoomSlug(roomSlug: string) {
@@ -536,7 +552,7 @@ export function getStaticLotParams() {
 export async function getHomeAuctionData() {
   noStore();
   const rooms = await getAuctionRooms();
-  const activeRoom = rooms[0] ?? null;
+  const activeRoom = rooms.find((room) => room.slug === "general-room") ?? null;
   const state = activeRoom ? await getRoomAuctionState(activeRoom.slug ?? activeRoom.id) : null;
   const currentLot = state?.currentLot ?? null;
 

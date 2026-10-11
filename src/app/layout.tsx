@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { AppHeader } from "@/components/AppHeader";
+import { LiveAudienceProvider } from "@/components/LiveAudienceProvider";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -18,8 +19,10 @@ export default function RootLayout({
         <div aria-hidden="true" className="site-background" />
         <div aria-hidden="true" className="site-background-overlay" />
         <div className="relative z-10 min-h-screen">
-          <AppHeader />
-          {children}
+          <LiveAudienceProvider>
+            <AppHeader />
+            {children}
+          </LiveAudienceProvider>
         </div>
       </body>
     </html>
