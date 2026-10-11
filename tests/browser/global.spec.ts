@@ -17,7 +17,7 @@ test('homepage stays in Grand Hall with its queue and fixed brighter background,
     .toEqual({ position: 'fixed', filter: 'brightness(1.05)' });
   await request.post(fixture, { data: { hallEmpty: true } });
   await page.reload();
-  await expect(page.getByRole('heading', { name: 'No eligible lots right now' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'No auctions currently available' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Jewellery fixture lot', exact: true })).toHaveCount(0);
   await expect(page.locator('aside a.group[href="/rooms/general-room"]')).toHaveClass(/border-auction-gold\/70/);
 });

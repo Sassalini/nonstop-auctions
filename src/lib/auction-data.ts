@@ -25,6 +25,7 @@ export type Lot = MockLot & {
   auctionStatus: LotStatus;
   endsAt?: string | null;
   nextEligibleAt?: string | null;
+  winningBid?: number | null;
 };
 
 export type AuctionRoom = MockAuctionRoom & {
@@ -183,6 +184,7 @@ function mapSupabaseLot(bundle: SupabaseLotBundle, lotNumber: number): Lot {
     startingBid,
     currentBid,
     bidCount: toNumber(lot.bid_count, bids.length),
+    winningBid: lot.winning_bid == null ? null : toNumber(lot.winning_bid),
     countdownSeconds: getSecondsUntil(getLotCountdownTarget(lot), lot.preview_duration_seconds),
     minimumIncrement,
     startsIn: formatStartsIn(lot),
@@ -560,6 +562,7 @@ export async function getHomeAuctionData() {
     rooms,
     activeRoom,
     currentLot,
+    roomCurrentLot: currentLot,
     upcomingLots: state?.upcomingLots ?? [],
   };
 }
@@ -581,6 +584,7 @@ export async function getRoomAuctionData(roomSlug: string) {
     rooms,
     activeRoom,
     currentLot,
+    roomCurrentLot: currentLot,
     upcomingLots: state?.upcomingLots ?? [],
   };
 }
@@ -611,6 +615,7 @@ export async function getLotAuctionData(lotId: string) {
     rooms,
     activeRoom,
     currentLot: await getLotById(lotId),
+    roomCurrentLot: state?.currentLot ?? null,
     upcomingLots: state?.upcomingLots ?? [],
   };
 }

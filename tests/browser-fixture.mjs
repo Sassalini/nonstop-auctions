@@ -60,6 +60,27 @@ const server = createServer(async (req, res) => {
       notifications = [accountA, accountB].map((account,index) => ({ id: `40000000-0000-0000-0000-00000000010${index+1}`, user_id: account, lot_id: id, kind: index ? 'WATCHED_SOLD' : 'WON', lot_title: index ? 'Private account two item' : 'Private account one item', auction_run: new Date().toISOString(), created_at: new Date().toISOString(), read_at: null }));
       watchlist = [accountA, accountB].map((account,index) => ({ id: `50000000-0000-0000-0000-00000000010${index+1}`, user_id: account, lot_id: id }));
     }
+    if (state.mode === 'sequence') {
+      rooms = [room]; accountsEnabled = false; notifications = []; watchlist = [];
+      lots = [
+        { ...createLot(state.status ?? 'ACTIVE_BIDDING'), title: 'Sequence current lot', highest_bidder_id: state.status === 'FIRST_BID_WINDOW' ? null : accountB, winning_bid: null, sold_at: null, unsold_at: null, ends_at: new Date(Date.now()+60000).toISOString() },
+        { ...createLot('WAITING'), id: '20000000-0000-0000-0000-000000000702', title: 'Next sequence lot', queue_position: 2, winning_bid: null, highest_bidder_id: null, sold_at: null, unsold_at: null },
+        { ...createLot('WAITING'), id: '20000000-0000-0000-0000-000000000703', title: 'Third sequence lot', queue_position: 3, winning_bid: null, highest_bidder_id: null, sold_at: null, unsold_at: null },
+      ];
+      images = lots.map(lot => ({ id: lot.id, lot_id: lot.id, image_url: '/images/auction-house-background.png', sort_order: 0 }));
+    }
+    if (state.sequenceResult) {
+      const finished = lots.find(lot => lot.id === id);
+      const next = lots.find(lot => lot.id === '20000000-0000-0000-0000-000000000702');
+      finished.status = state.sequenceResult; finished.ends_at = new Date().toISOString();
+      if (finished.status === 'SOLD') {
+        finished.current_bid = 250; finished.winning_bid = 250; finished.bid_count = 2; finished.highest_bidder_id = accountB; finished.sold_at = new Date().toISOString();
+      } else {
+        finished.current_bid = finished.starting_bid; finished.winning_bid = null; finished.highest_bidder_id = null; finished.bid_count = 0;
+        finished.unsold_at = new Date().toISOString(); finished.next_eligible_at = new Date(Date.now()+7*24*60*60*1000).toISOString(); finished.queue_position = 4;
+      }
+      next.status = 'PREVIEW'; next.preview_starts_at = new Date().toISOString(); next.ends_at = new Date(Date.now()+30000).toISOString();
+    }
     if (state.hallEmpty) lots = lots.filter(lot => lot.room_id !== room.id);
     if (state.retireHall) { const hallLot = lots.find(lot => lot.id === id); if (hallLot) hallLot.status = 'SOLD'; }
     if (state.notification) notifications.push({ ...state.notification, auction_run: new Date().toISOString(), created_at: new Date().toISOString(), read_at: null });

@@ -21,6 +21,7 @@ export default async function LotPage({
       rooms={auctionData.rooms}
       activeRoom={auctionData.activeRoom}
       currentLot={auctionData.currentLot}
+      roomCurrentLot={auctionData.roomCurrentLot}
       upcomingLots={auctionData.upcomingLots}
     />
   );

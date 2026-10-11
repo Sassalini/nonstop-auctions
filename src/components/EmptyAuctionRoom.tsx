@@ -8,7 +8,7 @@ export function EmptyAuctionRoom({ room, lots }: { room: AuctionRoom | null; lot
     <section className="flex min-h-[480px] min-w-0 flex-col items-center justify-center border border-white/10 bg-black/[0.62] p-6 text-center backdrop-blur-sm">
       <Gavel size={36} className="text-auction-gold" aria-hidden="true" />
       <p className="mt-5 text-xs uppercase tracking-[0.18em] text-auction-gold">{room?.name ?? "Non-Stop Auctions"}</p>
-      <h1 className="mt-3 text-2xl font-semibold text-auction-ivory">{room ? "No eligible lots right now" : "Auction rooms opening soon"}</h1>
+      <h1 className="mt-3 text-2xl font-semibold text-auction-ivory">{room ? lots.length ? "No eligible lots right now" : "No auctions currently available" : "Auction rooms opening soon"}</h1>
       <p className="mt-3 max-w-sm text-sm leading-6 text-auction-muted">
         {room ? "The next eligible lot will appear here automatically." : "Our catalogue will appear here when rooms are available."}
       </p>

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ListFilter } from "lucide-react";
 import { UpcomingLotCard } from "@/components/UpcomingLotCard";
+import { AutoPlayToggle } from "@/components/AutoPlayToggle";
 import type { AuctionRoom, Lot } from "@/lib/auction-data";
 
 type UpcomingLotsSidebarProps = {
@@ -23,16 +24,7 @@ export function UpcomingLotsSidebar({
           <h2 className="text-sm font-semibold text-auction-ivory">Up Next</h2>
           <p className="mt-0.5 truncate text-xs text-auction-muted">{room?.name ?? "Live auctions"}</p>
         </div>
-        <button
-          type="button"
-          aria-pressed="true"
-          className="flex items-center gap-2 text-xs text-auction-muted"
-        >
-          Auto-play
-          <span className="relative h-6 w-11 rounded-full border border-auction-gold/30 bg-auction-gold/25">
-            <span className="absolute right-1 top-1 size-4 rounded-full bg-auction-ivory" />
-          </span>
-        </button>
+        <AutoPlayToggle />
       </div>
 
       <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-1">

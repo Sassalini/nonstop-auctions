@@ -11,6 +11,7 @@ export default async function Home() {
       rooms={auctionData.rooms}
       activeRoom={auctionData.activeRoom}
       currentLot={auctionData.currentLot}
+      roomCurrentLot={auctionData.roomCurrentLot}
       upcomingLots={auctionData.upcomingLots}
     />
   );

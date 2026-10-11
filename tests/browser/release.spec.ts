@@ -6,10 +6,10 @@ test.beforeEach(async ({ request }) => { await request.post(fixtureUrl, { data: 
 test("real empty rooms never show demo items and remain accessible", async ({ page }) => {
   const response = await page.goto("/rooms/general-room");
   expect(response?.status()).toBe(200);
-  await expect(page.getByRole("heading", { name: "No eligible lots right now" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "No auctions currently available" })).toBeVisible();
   await expect(page.getByText("Pear Shaped Diamond Pendant Necklace")).toHaveCount(0);
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "No eligible lots right now" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "No auctions currently available" })).toBeVisible();
 });
 
 test("mobile navigation works and auction content stays within narrow viewports", async ({ page, request }) => {
