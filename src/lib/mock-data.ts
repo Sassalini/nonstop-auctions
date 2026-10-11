@@ -68,7 +68,7 @@ const roomDefinitions: RoomDefinition[] = [
   {
     id: "jewellery-room",
     name: "The Jewellery Room",
-    strapline: "Live auctions. Exceptional pieces.",
+    strapline: "The Finest in Jewellery.",
     category: "Fine Jewellery",
     imageUrl: image("photo-1605100804763-247f67b3557e"),
     lots: [
@@ -124,7 +124,7 @@ const roomDefinitions: RoomDefinition[] = [
   {
     id: "design-room",
     name: "The Design Room",
-    strapline: "Curated design. Modern classics.",
+    strapline: "Timeless Generational Homeware.",
     category: "Design",
     imageUrl: image("photo-1540574163026-643ea20ade25"),
     lots: [
@@ -151,8 +151,8 @@ const roomDefinitions: RoomDefinition[] = [
   },
   {
     id: "general-room",
-    name: "The General Room",
-    strapline: "Distinctive finds for every collection.",
+    name: "The Grand Hall",
+    strapline: "For the more special and unique spectacles.",
     category: "General",
     imageUrl: image("photo-1553062407-98eeb64c6a62"),
     lots: [
@@ -194,7 +194,7 @@ const roomDefinitions: RoomDefinition[] = [
   {
     id: "dining-room",
     name: "The Dining Room",
-    strapline: "Elegant service. Memorable tables.",
+    strapline: "The finest of cookware and crockery.",
     category: "Dining",
     imageUrl: image("photo-1617806118233-18e1de247200"),
     lots: [
@@ -208,7 +208,7 @@ const roomDefinitions: RoomDefinition[] = [
   {
     id: "music-room",
     name: "The Music Room",
-    strapline: "Instruments and sound with provenance.",
+    strapline: "Instruments with provenance.",
     category: "Music",
     imageUrl: image("photo-1511379938547-c1f69419868d"),
     lots: [
@@ -224,7 +224,8 @@ const roomDefinitions: RoomDefinition[] = [
     name: "The Technology Room",
     strapline: "Landmark machines. Ingenious design.",
     category: "Technology",
-    imageUrl: image("photo-1518770660439-4636190af6d"),
+    // Store the corrected Unsplash photo locally so room cards do not rely on its CDN.
+    imageUrl: "/images/technology-room.jpg",
     lots: [
       lot("Vintage Apple Computer", 1800, 2800, 1500),
       lot("Retro Games Console Bundle", 600, 900, 475),

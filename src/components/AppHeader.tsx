@@ -53,7 +53,7 @@ export function AppHeader() {
             <AuctionLogoMark />
           </span>
           <span className="hidden text-sm font-semibold uppercase tracking-[0.18em] sm:block">
-            Non-Stop Auctions
+            Nonstop Auctions
           </span>
         </Link>
 
