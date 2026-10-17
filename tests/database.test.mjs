@@ -3,6 +3,7 @@ import { readFile, readdir } from 'node:fs/promises';
 import { after, before, test } from 'node:test';
 import { PGlite } from '@electric-sql/pglite';
 import { pgcrypto } from '@electric-sql/pglite/contrib/pgcrypto';
+import { storageSchema } from './helpers/storage-schema.mjs';
 
 // Actual PostgreSQL functions/triggers/RLS, with only Supabase's auth schema stubbed.
 // PGlite is single-connection: multi-connection lock races still require staging.
@@ -27,6 +28,7 @@ before(async () => {
     grant usage on schema public, auth to anon, authenticated, service_role;
   `);
   const files = (await readdir(new URL('../supabase/migrations/', import.meta.url))).sort();
+  await db.exec(storageSchema);
   for (const file of files) {
     if (file.startsWith('005')) {
       await db.exec(await readFile(new URL('../supabase/seed.sql', import.meta.url), 'utf8'));
@@ -156,7 +158,9 @@ test('non-finite amounts, fractional pennies, self-bids, unverified users and in
 }));
 
 test('RLS grants own draft access and rejects direct bid/state/timing writes or other sellers', () => fixture(async () => {
-  const draft = (await asUser(seller, () => db.query(`insert into public.lots (room_id,seller_id,title,starting_bid) values ($1,$2,'Draft test',10) returning id`, [room, seller]))).rows[0].id;
+  // Legacy drafts remain readable/publishable; new browser inserts must use the secure RPC.
+  const draft = (await db.query(`insert into public.lots (room_id,seller_id,title,starting_bid) values ($1,$2,'Draft test',10) returning id`, [room, seller])).rows[0].id;
+  await assert.rejects(asUser(seller, () => db.query(`insert into public.lots (room_id,seller_id,title,starting_bid) values ($1,$2,'Bypass',10)`, [room, seller])), /permission denied/);
   assert.equal((await asUser(seller, () => db.query('select id from public.lots where id = $1', [draft]))).rows.length, 1);
   assert.equal((await asUser(bidder, () => db.query('select id from public.lots where id = $1', [draft]))).rows.length, 0);
   await assert.rejects(asUser(seller, () => db.query(`update public.lots set bid_extension_seconds = 500 where id = $1`, [draft])), /permission denied/);

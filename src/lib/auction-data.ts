@@ -1,4 +1,5 @@
 import { unstable_noStore as noStore } from "next/cache";
+import { resolveLotPhotos } from "@/lib/lot-photos";
 import { getAuctionDataMode } from "@/lib/auction-mode";
 import type { LiveLotCandidate } from "@/lib/live-viewers";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -154,8 +155,9 @@ function buildDetails(lot: LotRow, room?: AuctionRoomRow) {
 
 function mapSupabaseLot(bundle: SupabaseLotBundle, lotNumber: number): Lot {
   const { lot, room, images, bids } = bundle;
-  const galleryImageUrls = images.length
-    ? images.map((image) => image.image_url)
+  const availableImages = images.filter(image => image.image_url);
+  const galleryImageUrls = availableImages.length
+    ? availableImages.map((image) => image.image_url)
     : [room?.image_url ?? fallbackImageUrl];
   const startingBid = toNumber(lot.starting_bid);
   const rawCurrentBid = toNumber(lot.current_bid);
@@ -244,7 +246,8 @@ async function fetchLotImages(client: SupabaseReadClient, lotIds: string[]) {
     return new Map<string, LotImageRow[]>();
   }
 
-  return data.reduce((imagesByLotId, image) => {
+  const resolved = await resolveLotPhotos(client, data);
+  return resolved.reduce((imagesByLotId, image) => {
     const lotImages = imagesByLotId.get(image.lot_id) ?? [];
     lotImages.push(image);
     imagesByLotId.set(image.lot_id, lotImages);

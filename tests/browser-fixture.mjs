@@ -1,6 +1,7 @@
 // Test-only local Supabase HTTP fixture. Never uses .env.local or a hosted database.
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 
 const room = { id: '10000000-0000-0000-0000-000000000007', slug: 'general-room', name: 'The Grand Hall',
   description: 'For the more special and unique spectacles.', image_url: '/images/auction-house-background.png', display_order: 7, is_active: true, created_at: new Date().toISOString() };
@@ -19,6 +20,10 @@ function requestAccount(req) {
 const id = '20000000-0000-0000-0000-000000000701';
 let lots = [];
 let images = [];
+let photoObjects = new Map();
+let failUpload = false;
+let uploadsBeforeFailure = null;
+let loseSubmitResponse = false;
 const createLot = (status = 'PREVIEW') => ({ id, room_id: room.id, seller_id: '00000000-0000-0000-0000-000000000101',
   title: 'Release test catalogue item', description: 'Catalogue description', condition_report: 'Condition report', shipping_info: 'Collection information',
   starting_bid: 100, current_bid: 100, minimum_increment: 10, bid_count: status === 'ACTIVE_BIDDING' ? 1 : 0,
@@ -38,7 +43,14 @@ const server = createServer(async (req, res) => {
   if (url.pathname === '/_test/state') {
     const chunks = []; for await (const chunk of req) chunks.push(chunk);
     const state = JSON.parse(Buffer.concat(chunks).toString() || '{}');
-    if (state.mode === 'empty') { lots = []; images = []; rooms = [room]; accountsEnabled = false; notifications = []; watchlist = []; }
+    if (state.mode === 'empty') { lots = []; images = []; rooms = [room]; accountsEnabled = false; notifications = []; watchlist = []; photoObjects = new Map(); failUpload = false; uploadsBeforeFailure = null; loseSubmitResponse = false; }
+    if (state.mode === 'seller') {
+      accountsEnabled = true;
+      rooms = [room, jewellery, ...['Watch','Art','Design','Dining','Music','Technology','Collectables','Fashion','Motoring','Sport'].map((name,index) => ({ ...room, id: `10000000-0000-0000-0000-0000000000${String(index+20).padStart(2,'0')}`, slug: `${name.toLowerCase()}-room`, name: `The ${name} Room`, display_order: index+20 }))];
+    }
+    if (state.failUpload !== undefined) failUpload = state.failUpload;
+    if (state.failUploadAfter !== undefined) uploadsBeforeFailure = state.failUploadAfter;
+    if (state.loseSubmitResponse !== undefined) loseSubmitResponse = state.loseSubmitResponse;
     if (state.mode === 'preview' || state.mode === 'active') {
       lots = [createLot(state.mode === 'active' ? 'ACTIVE_BIDDING' : 'PREVIEW')];
       images = [{ id: 'image-one', lot_id: id, image_url: '/images/auction-house-background.png?view=one', sort_order: 0 }];
@@ -86,6 +98,7 @@ const server = createServer(async (req, res) => {
     if (state.notification) notifications.push({ ...state.notification, auction_run: new Date().toISOString(), created_at: new Date().toISOString(), read_at: null });
     return reply({ ok: true });
   }
+  if (url.pathname === '/_test/seller-state') return reply({ lots:lots.length, images:images.length, objects:photoObjects.size });
   if (url.pathname.endsWith('/rpc/auction_server_time')) return reply(new Date().toISOString());
   if (url.pathname.endsWith('/rpc/advance_room_lifecycle')) { const data = await body(); return reply(lots.find(lot => lot.room_id === data.p_room_id) ?? null); }
   if (url.pathname.endsWith('/rpc/lot_watchlist_count')) { const data = await body(); return reply(watchlist.filter(item => item.lot_id === data.p_lot_id).length); }
@@ -97,8 +110,64 @@ const server = createServer(async (req, res) => {
   if (accountsEnabled && url.pathname === '/auth/v1/logout') return reply({});
   if (url.pathname.startsWith('/auth/v1/')) return reply({ code: 'invalid_credentials', msg: 'Invalid login credentials' }, 400);
   const account = requestAccount(req);
+  if (url.pathname.startsWith('/rest/v1/rpc/') && /seller/.test(url.pathname)) {
+    if (!account) return reply({ message: 'Sign in first' },401);
+    const data = await body();
+    if (url.pathname.endsWith('/save_seller_draft')) {
+      const existing = lots.find(lot => lot.seller_id === account && lot.submission_key === data.p_submission_key);
+      if (existing) return reply(existing);
+      const created = { ...createLot('DRAFT'), id: randomUUID(), seller_id: account, submission_key: data.p_submission_key, room_id: data.p_room_id, title: data.p_title, description: data.p_description, starting_bid: data.p_starting_bid, current_bid: 0, ends_at: null, queue_position: 0 };
+      lots.push(created); return reply(created);
+    }
+    const lot = lots.find(lot => lot.id === data.p_lot_id && lot.seller_id === account);
+    if (url.pathname.endsWith('/prepare_seller_photo') && lot) {
+      let image = images.find(image => image.id === data.p_image_id);
+      if (!image) {
+        const path = `${account}/${lot.id}/${data.p_image_id}.${data.p_extension}`;
+        image = { id: data.p_image_id, lot_id: lot.id, storage_path: path, image_url: `storage:lot-photos/${path}`, sort_order: images.filter(image => image.lot_id === lot.id).length };
+        images.push(image);
+      }
+      return reply(image);
+    }
+    if (url.pathname.endsWith('/submit_seller_lot') && lot) {
+      lot.status = 'WAITING'; lot.queue_position = 1;
+      if (loseSubmitResponse) { loseSubmitResponse = false; return reply({ message: 'Test lost submission response' },503); }
+      return reply(lot);
+    }
+    if (url.pathname.endsWith('/remove_seller_photo')) { images = images.filter(image => image.id !== data.p_image_id); return reply(null); }
+    if (url.pathname.endsWith('/discard_seller_draft') && lot?.status === 'DRAFT') {
+      lots = lots.filter(item => item !== lot); images = images.filter(image => image.lot_id !== lot.id); return reply(null);
+    }
+    return reply({ message: 'Submission not found' },404);
+  }
+  if (url.pathname === '/storage/v1/object/sign/lot-photos') {
+    const data = await body();
+    return reply(data.paths.map(path => ({ path, error: photoObjects.has(path) ? null : 'not found', signedURL: photoObjects.has(path) ? `/object/sign/lot-photos/${path}?token=fixture` : null })));
+  }
+  if (url.pathname.startsWith('/storage/v1/object/sign/lot-photos/')) {
+    const stored = photoObjects.get(url.pathname.split('/lot-photos/')[1]);
+    if (!stored) return reply({},404);
+    res.setHeader('Content-Type',stored.type); res.writeHead(200); res.end(stored.buffer); return;
+  }
+  if (url.pathname.startsWith('/storage/v1/object/info/lot-photos/')) {
+    const stored = photoObjects.get(url.pathname.split('/lot-photos/')[1]);
+    return stored ? reply({ id:'fixture', metadata:{ size:stored.buffer.length, mimetype:stored.type } }) : reply({ message:'not found' },404);
+  }
+  if (url.pathname === '/storage/v1/object/lot-photos' && req.method === 'DELETE') {
+    const data = await body(); for (const path of data.prefixes) photoObjects.delete(path); return reply([]);
+  }
+  if (url.pathname.startsWith('/storage/v1/object/lot-photos/') && req.method === 'POST') {
+    if (failUpload || uploadsBeforeFailure === 0) return reply({ message:'Test interrupted photo upload' },503);
+    if (uploadsBeforeFailure !== null) uploadsBeforeFailure--;
+    const chunks=[]; for await (const chunk of req) chunks.push(chunk);
+    const form = await new Response(Buffer.concat(chunks), { headers:{ 'content-type':req.headers['content-type'] } }).formData();
+    const file = [...form.values()].find(value => typeof value !== 'string');
+    const path = url.pathname.split('/lot-photos/')[1];
+    photoObjects.set(path,{ type:file.type, buffer:Buffer.from(await file.arrayBuffer()) });
+    return reply({ Key:`lot-photos/${path}`, Id:randomUUID() });
+  }
   let rows = url.pathname.endsWith('/auction_rooms') ? rooms
-    : url.pathname.endsWith('/lots') ? lots : url.pathname.endsWith('/lot_images') ? images
+    : url.pathname.endsWith('/lots') ? lots.filter(lot => lot.status !== 'DRAFT' || lot.seller_id === account) : url.pathname.endsWith('/lot_images') ? images
     : url.pathname.endsWith('/notifications') ? notifications.filter(item => item.user_id === account)
     : url.pathname.endsWith('/watchlist') ? watchlist.filter(item => item.user_id === account) : [];
   for (const [column, filter] of url.searchParams) {

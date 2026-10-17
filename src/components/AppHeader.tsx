@@ -67,11 +67,11 @@ export function AppHeader() {
           ))}
         </nav>
 
-        <form className="mx-auto hidden w-full max-w-2xl items-center md:flex">
+        <form className="mx-auto hidden min-w-0 w-full max-w-2xl items-center md:flex">
           <label htmlFor="auction-search" className="sr-only">
             Search lots
           </label>
-          <div className="flex h-11 w-full items-center gap-3 rounded-lg border border-white/10 bg-white/[0.045] px-4 text-auction-muted shadow-inner shadow-black/30 transition focus-within:border-auction-gold/60">
+          <div className="flex h-11 min-w-0 w-full items-center gap-3 rounded-lg border border-white/10 bg-white/[0.045] px-4 text-auction-muted shadow-inner shadow-black/30 transition focus-within:border-auction-gold/60">
             <Search size={19} strokeWidth={1.8} />
             <input
               id="auction-search"

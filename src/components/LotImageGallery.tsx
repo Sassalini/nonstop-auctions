@@ -13,7 +13,8 @@ export function LotImageGallery({ lot }: LotImageGalleryProps) {
   const images = useMemo(() => {
     return Array.from(new Set(lot.galleryImageUrls?.length ? lot.galleryImageUrls : [lot.imageUrl]));
   }, [lot.galleryImageUrls, lot.imageUrl]);
-  const [selectedImage, setSelectedImage] = useState(images[0]);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const selectedImage = images[selectedIndex] ?? images[0];
 
   return (
     <div className="space-y-3">
@@ -53,7 +54,7 @@ export function LotImageGallery({ lot }: LotImageGalleryProps) {
               <button
                 key={imageUrl}
                 type="button"
-                onClick={() => setSelectedImage(imageUrl)}
+                onClick={() => setSelectedIndex(index)}
                 className={`relative aspect-[4/3] overflow-hidden rounded-md border transition ${
                   isSelected
                     ? "border-auction-gold shadow-glow"

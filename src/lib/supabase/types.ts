@@ -35,6 +35,7 @@ export type AuctionRoomRow = {
 };
 
 export type LotRow = {
+  submission_key: string | null;
   id: string;
   room_id: string;
   seller_id: string;
@@ -69,6 +70,7 @@ export type LotRow = {
 };
 
 export type LotImageRow = {
+  storage_path: string | null;
   id: string;
   lot_id: string;
   image_url: string;
@@ -276,6 +278,11 @@ export type Database = {
     };
     Views: Record<string, never>;
     Functions: {
+      save_seller_draft: { Args: { p_submission_key: string; p_room_id: string; p_title: string; p_description: string; p_starting_bid: number }; Returns: LotRow };
+      prepare_seller_photo: { Args: { p_lot_id: string; p_image_id: string; p_extension: string }; Returns: LotImageRow };
+      remove_seller_photo: { Args: { p_image_id: string }; Returns: undefined };
+      submit_seller_lot: { Args: { p_lot_id: string }; Returns: LotRow };
+      discard_seller_draft: { Args: { p_lot_id: string }; Returns: undefined };
       lot_watchlist_count: { Args: { p_lot_id: string }; Returns: number };
       auction_server_time: { Args: Record<string, never>; Returns: string };
       publish_lot: { Args: { p_lot_id: string }; Returns: LotRow };

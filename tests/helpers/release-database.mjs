@@ -1,6 +1,7 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { PGlite } from '@electric-sql/pglite';
 import { pgcrypto } from '@electric-sql/pglite/contrib/pgcrypto';
+import { storageSchema } from './storage-schema.mjs';
 
 // Local PostgreSQL only. No hosted connection or environment credentials.
 // Older release-audit/recovery tests intentionally exercise the 004/005 snapshot.
@@ -19,6 +20,7 @@ export async function releaseDatabase({ release = true, throughMigration = relea
     grant usage on schema public, auth to anon, authenticated, service_role;
     create publication supabase_realtime;
   `);
+  if (throughMigration >= 9) await db.exec(storageSchema);
   const directory = new URL('../../supabase/migrations/', import.meta.url);
   for (const file of (await readdir(directory)).sort()) {
     if (!file.endsWith('.sql') || Number(file.slice(0, 3)) > throughMigration) continue;

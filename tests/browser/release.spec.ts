@@ -33,7 +33,8 @@ test("mobile navigation works and auction content stays within narrow viewports"
   await page.getByRole("button", { name: "Menu", exact: true }).click();
   await page.getByRole("navigation", { name: "Mobile navigation" }).getByRole("link", { name: "Sell", exact: true }).click();
   await expect(page).toHaveURL(/\/sell$/);
-  await expect(page.getByRole("button", { name: "Seller submissions opening soon" })).toBeDisabled();
+  await expect(page.getByRole("heading", { name: "Sell an Item." })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Submit listing" })).toBeDisabled();
 });
 
 test("preview disables bidding and the existing login form submits safely", async ({ page, request }) => {

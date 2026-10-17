@@ -1,122 +1,56 @@
-import { Camera, ChevronRight, Gem, ShieldCheck, Truck, Upload } from "lucide-react";
+import { Camera, Gem, ShieldCheck, Truck } from "lucide-react";
 import { InteriorShell } from "@/components/InteriorShell";
+import { SellerListingForm } from "@/components/SellerListingForm";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { resolveLotPhotos } from "@/lib/lot-photos";
+import type { AuctionRoomRow, LotImageRow, LotRow } from "@/lib/supabase/types";
 
-const valuationSteps = [
-  {
-    title: "Specialist Review",
-    copy: "Category experts review images, provenance, and condition notes.",
-    icon: Gem,
-  },
-  {
-    title: "Protected Consignment",
-    copy: "Reserve guidance, identity checks, and seller controls stay visible.",
-    icon: ShieldCheck,
-  },
-  {
-    title: "Auction Logistics",
-    copy: "Collection, storage, photography, and insured dispatch are planned together.",
-    icon: Truck,
-  },
+export const dynamic = "force-dynamic";
+const steps = [
+  { title: "Moderation", copy: "We regularly monitor and regulate listings to do our best to ensure high quality auctions.", icon: Gem },
+  { title: "Trusted Sellers", copy: "Sellers go through verification before payouts to protect buyers from potentially harmful transactions.", icon: ShieldCheck },
+  { title: "A fully online Traditional Experience", copy: "Everything you’d expect from an online marketplace but with the benefits of a traditional auction format.", icon: Truck },
 ];
 
-export default function SellPage() {
-  return (
-    <InteriorShell
-      eyebrow="Sell With Nonstop"
-      title="Consign standout pieces to a premium live room."
-      description="Seller submissions are opening soon. Explore our consignment information below."
-    >
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_380px]">
-        <form className="rounded-lg border border-white/10 bg-auction-panel/90 p-5 shadow-glow sm:p-6">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <label className="space-y-2">
-              <span className="text-sm font-medium text-auction-ivory">Item title</span>
-              <input
-                placeholder="Diamond pendant necklace"
-                className="h-11 w-full rounded-md border border-white/10 bg-black/35 px-3 text-sm text-auction-ivory outline-none transition placeholder:text-auction-muted focus:border-auction-gold"
-              />
-            </label>
-            <label className="space-y-2">
-              <span className="text-sm font-medium text-auction-ivory">Auction room</span>
-              <select className="h-11 w-full rounded-md border border-white/10 bg-black/35 px-3 text-sm text-auction-ivory outline-none transition focus:border-auction-gold">
-                <option>The Jewellery Room</option>
-                <option>The Watch Room</option>
-                <option>The Art Room</option>
-                <option>The Design Room</option>
-              </select>
-            </label>
-            <label className="space-y-2">
-              <span className="text-sm font-medium text-auction-ivory">Estimated value</span>
-              <input
-                placeholder="GBP 5,000 - 8,000"
-                className="h-11 w-full rounded-md border border-white/10 bg-black/35 px-3 text-sm text-auction-ivory outline-none transition placeholder:text-auction-muted focus:border-auction-gold"
-              />
-            </label>
-            <label className="space-y-2">
-              <span className="text-sm font-medium text-auction-ivory">Reserve preference</span>
-              <select className="h-11 w-full rounded-md border border-white/10 bg-black/35 px-3 text-sm text-auction-ivory outline-none transition focus:border-auction-gold">
-                <option>Recommend a reserve</option>
-                <option>No reserve</option>
-                <option>I have a reserve in mind</option>
-              </select>
-            </label>
-          </div>
-
-          <label className="mt-5 block space-y-2">
-            <span className="text-sm font-medium text-auction-ivory">Condition notes</span>
-            <textarea
-              rows={5}
-              placeholder="Add measurements, certificates, service history, repairs, or provenance."
-              className="w-full resize-none rounded-md border border-white/10 bg-black/35 px-3 py-3 text-sm text-auction-ivory outline-none transition placeholder:text-auction-muted focus:border-auction-gold"
-            />
-          </label>
-
-          <div className="mt-5 rounded-lg border border-dashed border-auction-gold/40 bg-black/25 p-6 text-center">
-            <div className="mx-auto flex size-12 items-center justify-center rounded-lg border border-auction-gold/35 text-auction-gold">
-              <Upload size={22} strokeWidth={1.8} />
-            </div>
-            <p className="mt-3 text-sm font-medium text-auction-ivory">Upload catalogue images</p>
-            <p className="mt-1 text-xs text-auction-muted">
-              Front, reverse, hallmark, certificate, and condition details.
-            </p>
-          </div>
-
-          <button
-            type="button"
-            disabled
-            className="mt-5 flex h-11 w-full items-center justify-center gap-2 rounded-md bg-auction-gold px-4 text-sm font-semibold text-black transition hover:bg-auction-goldSoft"
-          >
-            Seller submissions opening soon
-            <ChevronRight size={18} strokeWidth={1.8} />
-          </button>
-        </form>
-
-        <aside className="space-y-3">
-          {valuationSteps.map((step) => {
-            const Icon = step.icon;
-            return (
-              <section
-                key={step.title}
-                className="rounded-lg border border-white/10 bg-auction-panel/80 p-5"
-              >
-                <Icon className="text-auction-gold" size={24} strokeWidth={1.8} />
-                <h2 className="mt-4 text-lg font-semibold text-auction-ivory">{step.title}</h2>
-                <p className="mt-2 text-sm leading-6 text-auction-muted">{step.copy}</p>
-              </section>
-            );
-          })}
-          <section className="rounded-lg border border-auction-gold/30 bg-auction-gold/10 p-5">
-            <Camera className="text-auction-gold" size={24} strokeWidth={1.8} />
-            <h2 className="mt-4 text-lg font-semibold text-auction-ivory">
-              Photography Standards
-            </h2>
-            <p className="mt-2 text-sm leading-6 text-auction-muted">
-              The live-room layout is built around large, inspectable imagery, so seller media is
-              treated as a first-class part of the listing.
-            </p>
-          </section>
-        </aside>
-      </div>
-    </InteriorShell>
-  );
+export default async function SellPage({ searchParams }: { searchParams: Promise<{ draft?: string }> }) {
+  let rooms: AuctionRoomRow[] = [];
+  let draft: LotRow | null = null;
+  let photos: LotImageRow[] = [];
+  let userId: string | null = null;
+  let loadError = "";
+  try {
+    const client = await createSupabaseServerClient();
+    const [{ data: { user } }, roomResult] = await Promise.all([
+      client.auth.getUser(), client.from("auction_rooms").select("*").eq("is_active", true).order("display_order").order("id"),
+    ]);
+    userId = user?.id ?? null;
+    if (roomResult.error) throw new Error("Could not load auction rooms. Please try again.");
+    rooms = roomResult.data ?? [];
+    const { draft: draftId } = await searchParams;
+    if (draftId && user) {
+      const result = await client.from("lots").select("*").eq("id", draftId).eq("seller_id", user.id).eq("status", "DRAFT").maybeSingle();
+      if (result.error || !result.data?.submission_key) throw new Error("That unfinished submission is unavailable. Open it from My Auctions.");
+      draft = result.data;
+      const imageResult = await client.from("lot_images").select("*").eq("lot_id", draft.id).order("sort_order");
+      if (imageResult.error) throw new Error("Could not load your photos. Please try again.");
+      photos = await resolveLotPhotos(client, imageResult.data ?? []);
+    }
+  } catch (error) { loadError = error instanceof Error ? error.message : "Seller submissions are temporarily unavailable."; }
+  return <InteriorShell eyebrow="Sell With Nonstop" title="Sell an Item."
+    description="Please provide item information in as much detail as you can. Submissions that are low quality and could be deemed potentially harmful may be removed. Please see our prohibited items document if you are unsure if your item is allowed to be listed.">
+    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_380px]">
+      <SellerListingForm key={draft?.id ?? "new"} rooms={rooms} userId={userId} draft={draft} initialPhotos={photos} loadError={loadError} />
+      <aside className="space-y-3">
+        {steps.map(({ title, copy, icon: Icon }) => <section key={title} className="rounded-lg border border-white/10 bg-auction-panel/80 p-5">
+          <Icon className="text-auction-gold" size={24} strokeWidth={1.8} />
+          <h2 className="mt-4 text-lg font-semibold text-auction-ivory">{title}</h2><p className="mt-2 text-sm leading-6 text-auction-muted">{copy}</p>
+        </section>)}
+        <section className="rounded-lg border border-auction-gold/30 bg-auction-gold/10 p-5">
+          <Camera className="text-auction-gold" size={24} strokeWidth={1.8} />
+          <h2 className="mt-4 text-lg font-semibold text-auction-ivory">High Quality As Standard</h2>
+          <p className="mt-2 text-sm leading-6 text-auction-muted">We strive to ensure only the highest quality items are bought and sold through us.</p>
+        </section>
+      </aside>
+    </div>
+  </InteriorShell>;
 }
