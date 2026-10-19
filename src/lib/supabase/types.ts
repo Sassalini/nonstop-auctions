@@ -62,7 +62,7 @@ export type LotRow = {
   unsold_at: string | null;
   next_eligible_at: string;
   queue_position: number;
-  highest_bidder_id: string | null;
+  highest_bidder_id?: string | null;
   winning_bid: number | null;
   is_premium: boolean;
   created_at: string;
@@ -278,6 +278,7 @@ export type Database = {
     };
     Views: Record<string, never>;
     Functions: {
+      my_completed_auctions: { Args: Record<string, never>; Returns: { lot_id: string; sale_price: number; completed_at: string; seller_name: string; buyer_name: string; is_buyer: boolean }[] };
       save_seller_draft: { Args: { p_submission_key: string; p_room_id: string; p_title: string; p_description: string; p_starting_bid: number }; Returns: LotRow };
       prepare_seller_photo: { Args: { p_lot_id: string; p_image_id: string; p_extension: string }; Returns: LotImageRow };
       remove_seller_photo: { Args: { p_image_id: string }; Returns: undefined };

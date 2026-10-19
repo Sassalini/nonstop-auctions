@@ -1,10 +1,11 @@
+import { lotColumns } from "@/lib/lot-columns";
 import { unstable_noStore as noStore } from "next/cache";
 import { resolveLotPhotos } from "@/lib/lot-photos";
 import { getAuctionDataMode } from "@/lib/auction-mode";
 import type { LiveLotCandidate } from "@/lib/live-viewers";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { formatShortDateTime, getLotStatusLabel } from "@/lib/auction-lifecycle";
+import { getLotStatusLabel } from "@/lib/auction-lifecycle";
 import {
   auctionRooms as mockAuctionRooms,
   getLotById as getMockLotById,
@@ -38,7 +39,7 @@ export type AuctionRoom = MockAuctionRoom & {
 type SupabaseReadClient = SupabaseClient<Database>;
 
 type SupabaseLotBundle = {
-  lot: LotRow;
+  lot: Omit<LotRow, "highest_bidder_id">;
   room?: AuctionRoomRow;
   images: LotImageRow[];
   bids: BidRow[];
@@ -118,7 +119,7 @@ function getSecondsUntil(value: string | null, fallback: number) {
   return Number.isFinite(seconds) ? Math.max(seconds, 0) : fallback;
 }
 
-function getLotCountdownTarget(lot: LotRow) {
+function getLotCountdownTarget(lot: Omit<LotRow, "highest_bidder_id">) {
   if (lot.status === "UNSOLD") {
     return lot.next_eligible_at;
   }
@@ -126,7 +127,7 @@ function getLotCountdownTarget(lot: LotRow) {
   return lot.ends_at ?? lot.bidding_starts_at ?? lot.preview_starts_at ?? lot.starts_at;
 }
 
-function formatStartsIn(lot: LotRow) {
+function formatStartsIn(lot: Omit<LotRow, "highest_bidder_id">) {
   if (lot.status === "PREVIEW" || lot.status === "FIRST_BID_WINDOW" || lot.status === "ACTIVE_BIDDING") {
     const seconds = getSecondsUntil(getLotCountdownTarget(lot), lot.preview_duration_seconds);
     const minutes = Math.floor(seconds / 60);
@@ -135,7 +136,7 @@ function formatStartsIn(lot: LotRow) {
   }
 
   if (lot.status === "UNSOLD") {
-    return lot.next_eligible_at ? formatShortDateTime(lot.next_eligible_at) : "Returned to queue";
+    return "Returned to queue";
   }
 
   if (lot.status === "WAITING") {
@@ -145,7 +146,7 @@ function formatStartsIn(lot: LotRow) {
   return getLotStatusLabel(lot.status);
 }
 
-function buildDetails(lot: LotRow, room?: AuctionRoomRow) {
+function buildDetails(lot: Omit<LotRow, "highest_bidder_id">, room?: AuctionRoomRow) {
   return [
     room?.name ?? "Auction lot",
     getLotStatusLabel(lot.status),
@@ -268,7 +269,7 @@ async function fetchSupabaseSnapshot() {
     .select("*")
     .eq("is_active", true)
     .order("display_order", { ascending: true })
-    .order("created_at", { ascending: true });
+    .order("created_at", { ascending: true }).order("id", { ascending: true });
 
   if (roomsError) {
     throwAuctionDataError("Could not load auction rooms", roomsError);
@@ -278,11 +279,10 @@ async function fetchSupabaseSnapshot() {
 
   const { data: lotsData, error: lotsError } = await client
     .from("lots")
-    .select("*")
+    .select(lotColumns)
     .in("status", visibleLotStatuses)
     .order("queue_position", { ascending: true })
-    .order("next_eligible_at", { ascending: true })
-    .order("created_at", { ascending: true });
+    .order("created_at", { ascending: true }).order("id", { ascending: true });
 
   if (lotsError) {
     throwAuctionDataError("Could not load auction lots", lotsError);
@@ -373,7 +373,7 @@ async function fetchSupabaseRoomAuctionState(
 
   const { data: currentLotRow, error: currentLotError } = await client
     .from("lots")
-    .select("*")
+    .select(lotColumns)
     .eq("room_id", room.id)
     .in("status", currentLotStatuses)
     .order("queue_position", { ascending: true })
@@ -388,13 +388,12 @@ async function fetchSupabaseRoomAuctionState(
   const excludedId = excludeLotId ?? currentLotRow?.id;
   let upcomingQuery = client
     .from("lots")
-    .select("*")
+    .select(lotColumns)
     .eq("room_id", room.id)
     .in("status", upcomingLotStatuses)
     .order("queue_position", { ascending: true })
-    .order("next_eligible_at", { ascending: true })
     .order("created_at", { ascending: true })
-    .limit(limit);
+    .order("id", { ascending: true }).limit(limit);
 
   if (excludedId) {
     upcomingQuery = upcomingQuery.neq("id", excludedId);
@@ -412,7 +411,7 @@ async function fetchSupabaseRoomAuctionState(
   const sourceRows = Array.from(
     new Map(
       [currentLotRow, ...upcomingRows]
-        .filter((lot): lot is LotRow => Boolean(lot))
+        .filter((lot): lot is Omit<LotRow, "highest_bidder_id"> => Boolean(lot))
         .map((lot) => [lot.id, lot]),
     ).values(),
   );
@@ -507,13 +506,16 @@ export async function getUpcomingLotsByRoomSlug(roomSlug: string) {
 
 export async function getLotById(lotId: string) {
   noStore();
-  const snapshot = await fetchSupabaseSnapshot();
-
-  if (!snapshot) {
-    return getMockLotById(lotId) ?? null;
-  }
-
-  return snapshot.lots.find((lot) => lot.id === lotId) ?? null;
+  if (isDemoMode()) return getMockLotById(lotId) ?? null;
+  const client = await createSupabaseServerClient();
+  const { data: lot, error } = await client.from("lots").select(lotColumns).eq("id", lotId).maybeSingle();
+  if (error) throwAuctionDataError("Could not load lot", error);
+  if (!lot) return null;
+  const [{ data: room }, images] = await Promise.all([
+    client.from("auction_rooms").select("*").eq("id", lot.room_id).maybeSingle(),
+    fetchLotImages(client, [lotId]),
+  ]);
+  return mapSupabaseLot({ lot, room: room ?? undefined, images: images.get(lotId) ?? [], bids: [] }, lot.queue_position || 1);
 }
 
 export async function getBidsByLotId(lotId: string) {
@@ -527,7 +529,6 @@ export async function getBidsByLotId(lotId: string) {
     .from("bids")
     .select("*")
     .eq("lot_id", lotId)
-    .eq("bidder_id", user.id)
     .order("created_at", { ascending: false });
 
   if (error || !data) {
@@ -540,7 +541,7 @@ export async function getBidsByLotId(lotId: string) {
   return data;
 }
 
-export async function listLots() {
+export async function listLots(): Promise<Lot[]> {
   noStore();
   const snapshot = await fetchSupabaseSnapshot();
   return snapshot ? snapshot.lots : mockLots;
@@ -601,18 +602,21 @@ export async function getLotAuctionData(lotId: string) {
   }
 
   const rooms = await getAuctionRooms();
-  const activeRoom =
-    rooms.find((room) => room.slug === currentLot.roomId || room.id === currentLot.roomId) ??
-    null;
+  let activeRoom = rooms.find((room) => room.slug === currentLot.roomId || room.id === currentLot.roomId) ?? null;
+  if (!activeRoom && !isDemoMode()) {
+    const client = await createSupabaseServerClient();
+    const { data: room } = await client.from("auction_rooms").select("*").eq("slug", currentLot.roomId).maybeSingle();
+    if (room) activeRoom = mapSupabaseRoom(room);
+  }
 
   if (!activeRoom) {
     return null;
   }
 
-  const state = await getRoomAuctionState(
+  const state = rooms.some(room => room.id === activeRoom.id) ? await getRoomAuctionState(
     activeRoom.slug ?? activeRoom.id,
     currentLot.id,
-  );
+  ) : null;
 
   return {
     rooms,

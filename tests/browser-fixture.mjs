@@ -72,6 +72,11 @@ const server = createServer(async (req, res) => {
       notifications = [accountA, accountB].map((account,index) => ({ id: `40000000-0000-0000-0000-00000000010${index+1}`, user_id: account, lot_id: id, kind: index ? 'WATCHED_SOLD' : 'WON', lot_title: index ? 'Private account two item' : 'Private account one item', auction_run: new Date().toISOString(), created_at: new Date().toISOString(), read_at: null }));
       watchlist = [accountA, accountB].map((account,index) => ({ id: `50000000-0000-0000-0000-00000000010${index+1}`, user_id: account, lot_id: id }));
     }
+    if (state.mode === 'history') {
+      accountsEnabled = true; rooms = [room];
+      lots = [{ ...createLot('SOLD'), seller_id: accountA, highest_bidder_id: accountB, winning_bid: 125.50, current_bid: 125.50, sold_at: new Date().toISOString(), title: 'Completed history item' }];
+      images = [{ id, lot_id: id, image_url: '/images/auction-house-background.png', sort_order: 0 }];
+    }
     if (state.mode === 'sequence') {
       rooms = [room]; accountsEnabled = false; notifications = []; watchlist = [];
       lots = [
@@ -89,7 +94,7 @@ const server = createServer(async (req, res) => {
         finished.current_bid = 250; finished.winning_bid = 250; finished.bid_count = 2; finished.highest_bidder_id = accountB; finished.sold_at = new Date().toISOString();
       } else {
         finished.current_bid = finished.starting_bid; finished.winning_bid = null; finished.highest_bidder_id = null; finished.bid_count = 0;
-        finished.unsold_at = new Date().toISOString(); finished.next_eligible_at = new Date(Date.now()+7*24*60*60*1000).toISOString(); finished.queue_position = 4;
+        finished.unsold_at = new Date().toISOString(); finished.next_eligible_at = new Date().toISOString(); finished.queue_position = 4;
       }
       next.status = 'PREVIEW'; next.preview_starts_at = new Date().toISOString(); next.ends_at = new Date(Date.now()+30000).toISOString();
     }
@@ -99,6 +104,10 @@ const server = createServer(async (req, res) => {
     return reply({ ok: true });
   }
   if (url.pathname === '/_test/seller-state') return reply({ lots:lots.length, images:images.length, objects:photoObjects.size });
+  if (url.pathname.endsWith('/rpc/my_completed_auctions')) {
+    const account = requestAccount(req);
+    return reply(lots.filter(lot => lot.status === 'SOLD' && account && (lot.seller_id === account || lot.highest_bidder_id === account)).map(lot => ({ lot_id: lot.id, sale_price: lot.winning_bid, completed_at: lot.sold_at, seller_name: 'History Seller', buyer_name: 'History Buyer', is_buyer: lot.highest_bidder_id === account })));
+  }
   if (url.pathname.endsWith('/rpc/auction_server_time')) return reply(new Date().toISOString());
   if (url.pathname.endsWith('/rpc/advance_room_lifecycle')) { const data = await body(); return reply(lots.find(lot => lot.room_id === data.p_room_id) ?? null); }
   if (url.pathname.endsWith('/rpc/lot_watchlist_count')) { const data = await body(); return reply(watchlist.filter(item => item.lot_id === data.p_lot_id).length); }

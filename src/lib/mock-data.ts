@@ -236,7 +236,7 @@ const roomDefinitions: RoomDefinition[] = [
 ];
 
 const previewSeconds = 30;
-const returnedToQueueAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+const returnedToQueueAt = new Date(Date.now()).toISOString();
 
 function buildMockLot(
   room: RoomDefinition,
@@ -246,7 +246,7 @@ function buildMockLot(
 ): Lot {
   const auctionStatus: LotStatus = lotIndex === 0 ? "PREVIEW" : lotIndex === 4 ? "UNSOLD" : "WAITING";
   const minimumIncrement = definition.startingBid >= 5000 ? 250 : definition.startingBid >= 1000 ? 100 : 50;
-  const countdownSeconds = auctionStatus === "PREVIEW" ? previewSeconds : auctionStatus === "UNSOLD" ? 7 * 24 * 60 * 60 : 0;
+  const countdownSeconds = auctionStatus === "PREVIEW" ? previewSeconds : 0;
 
   return {
     id: `${room.id}-lot-${lotIndex + 1}`,
@@ -256,7 +256,7 @@ function buildMockLot(
     category: room.category,
     maker: "Private collection",
     details: [room.category, "Curated sale", "No reserve unless stated"],
-    description: `${definition.title} selected for ${room.name}, with a clear catalogue description and an estimate reflecting current specialist guidance.`,
+    description: `${definition.title} selected for ${room.name}, with a clear catalogue description and clear starting bid information.`,
     conditionReport: "Good auction condition with age-related wear noted in the catalogue photographs.",
     shippingInfo: "Insured UK delivery or collection by appointment. International quotes are available on request.",
     imageUrl: room.imageUrl,
@@ -269,7 +269,7 @@ function buildMockLot(
     bidCount: 0,
     countdownSeconds,
     minimumIncrement,
-    startsIn: auctionStatus === "PREVIEW" ? `00:${String(previewSeconds).padStart(2, "0")}` : auctionStatus === "UNSOLD" ? "7 days" : "Queued",
+    startsIn: auctionStatus === "PREVIEW" ? `00:${String(previewSeconds).padStart(2, "0")}` : auctionStatus === "UNSOLD" ? "Returned to queue" : "Queued",
     auctionStatus,
     nextEligibleAt: auctionStatus === "UNSOLD" ? returnedToQueueAt : null,
   };

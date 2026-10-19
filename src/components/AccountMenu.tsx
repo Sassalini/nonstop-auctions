@@ -23,6 +23,7 @@ export function AccountMenu() {
     <Link href={name ? "/my-auctions" : "/login"} aria-label={name ?? "Sign in"} className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.045] px-2.5 py-2 text-sm text-auction-ivory transition hover:border-auction-gold/40">
       <UserCircle size={22} strokeWidth={1.8} /><span className="hidden sm:inline">{name ?? "Sign in"}</span>
     </Link>
+    {name ? <Link href="/won-auctions" className="px-2 text-xs text-auction-gold">Won Auctions</Link> : null}
     {name ? <button type="button" onClick={async () => {
       const { error } = await createSupabaseBrowserClient().auth.signOut();
       if (!error) { setName(null); router.replace("/login"); router.refresh(); }

@@ -41,8 +41,8 @@ for (const width of [375,1440]) {
     hub.emit('lots', { id: first, room_id: roomId, status: 'SOLD' });
     await expect(page.getByText("Auto-play is off. You are viewing this lot's final result.")).toBeVisible();
     await expect(heading(page, 'Sequence current lot')).toBeVisible();
-    await expect(page.getByText('Winning bid', { exact: true })).toBeVisible();
-    await expect(page.getByText('£250', { exact: true }).first()).toBeVisible();
+    await expect(page.getByText('Auction price', { exact: true })).toBeVisible();
+    await expect(page.getByText('Sold for: £250', { exact: true }).first()).toBeVisible();
     await expect(page).toHaveURL(new RegExp(`/lots/${first}$`));
     await page.screenshot({ path: `test-results/auto-play-off-${width}.png`, fullPage: width < 1000 });
     await page.reload();
@@ -74,19 +74,19 @@ test('switching on while viewing a completed lot immediately rejoins the selecte
   await expect(page).toHaveURL(new RegExp(`/lots/${next}$`));
 });
 
-test('no-bid completion stays UNSOLD with no fabricated final bid and a seven-day return', async ({ context, page, request }) => {
+test('no-bid completion stays UNSOLD with starting bid and immediate queue return', async ({ context, page, request }) => {
   await request.post(fixture, { data: { mode: 'sequence', status: 'FIRST_BID_WINDOW' } });
   const hub = new RealtimeFixture(); await hub.attach(context);
   await page.goto(`/lots/${first}`); await toggle(page).click();
   await request.post(fixture, { data: { sequenceResult: 'UNSOLD' } });
   hub.emit('lots', { id: first, room_id: roomId, status: 'UNSOLD' });
   await expect(heading(page, 'Sequence current lot')).toBeVisible();
-  await expect(page.getByText('No bids', { exact: true })).toBeVisible();
+  await expect(page.getByText('Starting bid: £100', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('No bids — returned to queue', { exact: true }).first()).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`/lots/${first}$`));
   const response = await request.get(`http://127.0.0.1:54399/rest/v1/lots?id=eq.${first}`);
   const [lot] = await response.json();
-  expect(Date.parse(lot.next_eligible_at) - Date.parse(lot.unsold_at)).toBe(7*24*60*60*1000);
+  expect(Math.abs(Date.parse(lot.next_eligible_at) - Date.parse(lot.unsold_at))).toBeLessThan(1000);
   expect(lot.winning_bid).toBeNull(); expect(lot.highest_bidder_id).toBeNull();
 });
 

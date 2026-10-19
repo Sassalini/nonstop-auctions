@@ -1,16 +1,16 @@
+import { lotPrice } from "@/lib/lot-price";
 import Image from "next/image";
 import Link from "next/link";
 import { AuctionStatusBadge } from "@/components/AuctionStatusBadge";
 import { CountdownTimer } from "@/components/CountdownTimer";
 import {
-  formatShortDateTime,
   getLotBadgeVariant,
   getLotCompactStatusLabel,
   getLotStatusLabel,
   getLotTimerLabel,
   isTimedLifecycleStatus,
 } from "@/lib/auction-lifecycle";
-import { formatEstimate } from "@/lib/format";
+
 import type { Lot } from "@/lib/auction-data";
 
 type UpcomingLotCardProps = {
@@ -21,10 +21,7 @@ export function UpcomingLotCard({ lot }: UpcomingLotCardProps) {
   const statusLabel = getLotStatusLabel(lot.auctionStatus);
   const timerLabel = getLotTimerLabel(lot.auctionStatus);
   const showTimer = isTimedLifecycleStatus(lot.auctionStatus);
-  const unavailableUntil =
-    lot.auctionStatus === "UNSOLD" && lot.nextEligibleAt
-      ? formatShortDateTime(lot.nextEligibleAt)
-      : "";
+
 
   return (
     <Link
@@ -50,11 +47,9 @@ export function UpcomingLotCard({ lot }: UpcomingLotCardProps) {
         </div>
         <h3 className="mt-1 truncate text-sm text-auction-ivory">{lot.title}</h3>
         <p className="mt-1 text-xs text-auction-muted">
-          Est. {formatEstimate(lot.estimateLow, lot.estimateHigh)}
+          {lotPrice(lot)}
         </p>
-        {unavailableUntil ? (
-          <p className="mt-1 text-xs text-auction-muted">Unavailable until {unavailableUntil}</p>
-        ) : showTimer ? (
+        {showTimer ? (
           <p className="mt-1 text-xs text-auction-muted">
             {timerLabel} <CountdownTimer key={lot.id} initialSeconds={lot.countdownSeconds} endsAt={lot.endsAt} compact />
           </p>

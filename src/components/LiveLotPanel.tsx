@@ -1,3 +1,4 @@
+import { AuctionWinConfirmation } from "@/components/AuctionWinConfirmation";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { LotAudience } from "@/components/LotAudience";
@@ -36,6 +37,7 @@ export function LiveLotPanel({ room, lot }: LiveLotPanelProps) {
         </div>
       </div>
 
+      {lot.auctionStatus === "SOLD" ? <AuctionWinConfirmation key={lot.id} lotId={lot.id} /> : null}
       <LotImageGallery key={lot.id} lot={lot} />
 
       <div className="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1fr)_460px]">

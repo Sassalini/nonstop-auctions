@@ -1,7 +1,8 @@
+import { lotPrice } from "@/lib/lot-price";
 import { CountdownTimer } from "@/components/CountdownTimer";
 import { BidForm } from "@/components/BidForm";
 import { getLotTimerLabel, isTimedLifecycleStatus } from "@/lib/auction-lifecycle";
-import { formatCurrency, formatEstimate } from "@/lib/format";
+
 import type { Lot } from "@/lib/auction-data";
 
 type BidPanelProps = {
@@ -17,14 +18,9 @@ export function BidPanel({ lot }: BidPanelProps) {
       <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(10rem,0.8fr)_minmax(14rem,1.05fr)] lg:grid-cols-1 xl:grid-cols-[minmax(7.125rem,0.8fr)_minmax(8.875rem,1fr)_minmax(8.75rem,1fr)]">
         <div className="min-w-0">
           <p className="whitespace-nowrap text-xs uppercase tracking-[0.18em] text-auction-muted">
-            {lot.auctionStatus === "SOLD" ? "Winning bid" : lot.auctionStatus === "UNSOLD" ? "Final bid" : "Current Bid"}
+            Auction price
           </p>
-          <p className="mt-2 text-2xl font-semibold text-auction-ivory sm:text-3xl xl:text-2xl 2xl:text-[1.7rem]">
-            {lot.auctionStatus === "UNSOLD" && lot.bidCount === 0 ? "No bids" : formatCurrency(lot.auctionStatus === "SOLD" ? lot.winningBid ?? lot.currentBid : lot.currentBid)}
-          </p>
-          <p className="mt-2 text-sm leading-5 text-auction-muted">
-            Next estimate: {formatEstimate(lot.estimateLow, lot.estimateHigh)}
-          </p>
+          <p className="mt-2 text-xl font-semibold text-auction-ivory">{lotPrice(lot)}</p>
         </div>
 
         <div className="min-w-0 space-y-4 border-t border-white/10 pt-4 md:border-l md:border-t-0 md:pl-4 md:pt-0 lg:border-l-0 lg:border-t lg:pl-0 lg:pt-4 xl:border-l xl:border-t-0 xl:pl-4 xl:pt-0">

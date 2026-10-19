@@ -6,7 +6,7 @@ import {
   getLotBadgeVariant,
   getLotCompactStatusLabel,
 } from "@/lib/auction-lifecycle";
-import { formatCurrency } from "@/lib/format";
+import { lotPrice } from "@/lib/lot-price";
 import type { AuctionRoom, Lot } from "@/lib/auction-data";
 
 type AuctionRoomCardProps = {
@@ -72,7 +72,7 @@ export function AuctionRoomCard({
                 {liveLot ? `Lot ${liveLot.lotNumber}` : "Awaiting next lot"}
               </p>
               <p className="text-sm font-semibold text-auction-ivory">
-                {formatCurrency(room.currentBid)}
+                {liveLot ? lotPrice(liveLot) : "Awaiting starting bid"}
               </p>
               <p className="text-xs text-auction-muted">{room.bidCount} bids</p>
             </div>

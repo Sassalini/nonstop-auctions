@@ -123,12 +123,12 @@ test('late bids reject and SOLD starts the next same-room preview', () => fixtur
   assert.equal((await row(second)).status, 'PREVIEW');
 }));
 
-test('no bid becomes UNSOLD for seven days, moves to queue end, and advances the room', () => fixture(async () => {
+test('no bid becomes UNSOLD immediately, moves to queue end, and advances the room', () => fixture(async () => {
   await openFirstWindow(); await expire();
   await db.query('select public.advance_room_lifecycle($1)', [room]);
   const unsold = await row();
   assert.equal(unsold.status, 'UNSOLD');
-  assert.equal(new Date(unsold.next_eligible_at) - new Date(unsold.unsold_at), 7 * 86400000);
+  assert.ok(new Date(unsold.next_eligible_at) <= new Date());
   assert.equal((await row(second)).status, 'PREVIEW');
   const max = (await db.query('select max(queue_position) as position from public.lots where room_id = $1', [room])).rows[0].position;
   assert.equal(unsold.queue_position, max);
@@ -182,9 +182,9 @@ test('anonymous visitors cannot see drafts or bid identities and new users get p
   } finally { await db.exec('reset role'); }
 }));
 
-test('seven-day eligibility returns the same lot to the same room with a clean preview', () => fixture(async () => {
+test('queue eligibility returns the same lot to the same room with a clean preview', () => fixture(async () => {
   await db.query(`select set_config('app.auction_lifecycle', 'true', true)`);
-  await db.query(`update public.lots set status = 'UNSOLD', next_eligible_at = clock_timestamp() + interval '1 day' where room_id = $1`, [room]);
+  await db.query(`update public.lots set status = 'UNSOLD', unsold_at = clock_timestamp(), next_eligible_at = clock_timestamp() + interval '1 day' where room_id = $1`, [room]);
   await db.query('select public.advance_room_lifecycle($1)', [room]);
   assert.equal((await row()).status, 'UNSOLD');
   await db.query(`update public.lots set next_eligible_at = clock_timestamp() - interval '1 second' where id = $1`, [first]);

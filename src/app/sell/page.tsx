@@ -1,3 +1,4 @@
+import { lotColumns } from "@/lib/lot-columns";
 import { Camera, Gem, ShieldCheck, Truck } from "lucide-react";
 import { InteriorShell } from "@/components/InteriorShell";
 import { SellerListingForm } from "@/components/SellerListingForm";
@@ -28,7 +29,7 @@ export default async function SellPage({ searchParams }: { searchParams: Promise
     rooms = roomResult.data ?? [];
     const { draft: draftId } = await searchParams;
     if (draftId && user) {
-      const result = await client.from("lots").select("*").eq("id", draftId).eq("seller_id", user.id).eq("status", "DRAFT").maybeSingle();
+      const result = await client.from("lots").select(lotColumns).eq("id", draftId).eq("seller_id", user.id).eq("status", "DRAFT").maybeSingle();
       if (result.error || !result.data?.submission_key) throw new Error("That unfinished submission is unavailable. Open it from My Auctions.");
       draft = result.data;
       const imageResult = await client.from("lot_images").select("*").eq("lot_id", draft.id).order("sort_order");
