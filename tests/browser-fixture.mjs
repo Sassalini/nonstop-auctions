@@ -30,15 +30,30 @@ const createLot = (status = 'PREVIEW') => ({ id, room_id: room.id, seller_id: '0
   status, preview_duration_seconds: 30, first_bid_duration_seconds: 30, bid_extension_seconds: 5, requeue_delay_days: 7,
   ends_at: new Date(Date.now() + (status === 'ACTIVE_BIDDING' ? 5000 : 30000)).toISOString(), next_eligible_at: new Date().toISOString(),
   queue_position: 1, is_premium: false, created_at: new Date().toISOString() });
+let performanceTrace = [];
+const fixtureDelay = Number(process.env.PERFORMANCE_API_DELAY_MS ?? 0);
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://127.0.0.1:54399');
+  if (url.pathname === '/_test/performance-config') {
+    res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({delayMs:fixtureDelay})); return;
+  }
+  if (url.pathname === '/_test/performance') {
+    if (req.method === 'DELETE') performanceTrace = [];
+    res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(performanceTrace)); return;
+  }
+  const trace = { path: url.pathname, query: url.search, startedAt: performance.now(), durationMs: 0, bytes: 0, rows: 0 };
+  if (!url.pathname.startsWith('/_test/') && req.method !== 'OPTIONS') {
+    performanceTrace.push(trace);
+    res.on('finish', () => { trace.durationMs = performance.now() - trace.startedAt; });
+    if (fixtureDelay) await new Promise(resolve => setTimeout(resolve, fixtureDelay));
+  }
   res.setHeader('Access-Control-Allow-Origin', 'http://127.0.0.1:3005');
   res.setHeader('Access-Control-Allow-Headers', req.headers['access-control-request-headers'] ?? 'apikey,authorization,content-type,x-client-info,prefer');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,DELETE,PATCH,OPTIONS');
   res.setHeader('Access-Control-Expose-Headers', 'Content-Range');
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
   res.setHeader('Content-Type', 'application/json');
-  const reply = (data, code = 200) => { res.writeHead(code); res.end(JSON.stringify(data)); };
+  const reply = (data, code = 200) => { res.writeHead(code); const payload = JSON.stringify(data); trace.bytes = Buffer.byteLength(payload); trace.rows = Array.isArray(data) ? data.length : 1; res.end(payload); };
   const body = async () => { const chunks = []; for await (const chunk of req) chunks.push(chunk); return JSON.parse(Buffer.concat(chunks).toString() || '{}'); };
   if (url.pathname === '/_test/state') {
     const chunks = []; for await (const chunk of req) chunks.push(chunk);
@@ -72,6 +87,20 @@ const server = createServer(async (req, res) => {
       notifications = [accountA, accountB].map((account,index) => ({ id: `40000000-0000-0000-0000-00000000010${index+1}`, user_id: account, lot_id: id, kind: index ? 'WATCHED_SOLD' : 'WON', lot_title: index ? 'Private account two item' : 'Private account one item', auction_run: new Date().toISOString(), created_at: new Date().toISOString(), read_at: null }));
       watchlist = [accountA, accountB].map((account,index) => ({ id: `50000000-0000-0000-0000-00000000010${index+1}`, user_id: account, lot_id: id }));
     }
+    if (state.mode === 'performance') {
+      accountsEnabled = true; rooms = [room, jewellery]; notifications = []; watchlist = [];
+      lots = rooms.flatMap((r, ri) => [
+        { ...createLot('FIRST_BID_WINDOW'), id: ri ? '20000000-0000-0000-0000-000000000101' : id, room_id: r.id, ends_at: new Date(Date.now()+3600000).toISOString() },
+        ...Array.from({length:6},(_,i)=>({ ...createLot('WAITING'), id: `30000000-0000-0000-${String(ri).padStart(4,'0')}-${String(i+1).padStart(12,'0')}`, room_id:r.id, queue_position:i+2 })),
+        ...Array.from({length:120},(_,i)=>({ ...createLot('SOLD'), id: `40000000-0000-0000-${String(ri).padStart(4,'0')}-${String(i+1).padStart(12,'0')}`, room_id:r.id, queue_position:i+8, seller_id:i%2 ? accountA : accountB, highest_bidder_id:i%2 ? accountB : accountA, winning_bid:125.5, sold_at:new Date(Date.UTC(2026,0,1,0,i)).toISOString() })),
+      ]);
+      watchlist = [ {id:'watched',user_id:accountA,lot_id:id} ];
+      images = lots.flatMap(lot=>Array.from({length:3},(_,i)=>{
+        const path=`${lot.seller_id}/${lot.id}/${i}.png`;
+        photoObjects.set(path,{type:'image/png',buffer:Buffer.from('fixture')});
+        return { id:`${lot.id}-${i}`, lot_id:lot.id,storage_path:path,image_url:`storage:lot-photos/${path}`,sort_order:i,created_at:new Date().toISOString() };
+      }));
+    }
     if (state.mode === 'history') {
       accountsEnabled = true; rooms = [room];
       lots = [{ ...createLot('SOLD'), seller_id: accountA, highest_bidder_id: accountB, winning_bid: 125.50, current_bid: 125.50, sold_at: new Date().toISOString(), title: 'Completed history item' }];
@@ -104,12 +133,24 @@ const server = createServer(async (req, res) => {
     return reply({ ok: true });
   }
   if (url.pathname === '/_test/seller-state') return reply({ lots:lots.length, images:images.length, objects:photoObjects.size });
+  if (url.pathname.endsWith('/rpc/completed_auctions_page')) {
+    const account = requestAccount(req), data = await body();
+    if (!account) return reply({message:'Authentication required'},401);
+    if (!['buyer','seller'].includes(data.p_mode)) return reply({message:'Invalid history mode'},400);
+    const rows = lots.filter(lot => lot.status === 'SOLD' && (data.p_mode === 'buyer' ? lot.highest_bidder_id === account : lot.seller_id === account) && (!data.p_lot_id || lot.id === data.p_lot_id))
+      .sort((a,b)=>String(b.sold_at).localeCompare(String(a.sold_at)) || b.id.localeCompare(a.id))
+      .slice(data.p_offset ?? 0, (data.p_offset ?? 0) + (data.p_limit ?? 51));
+    return reply(rows.map(lot => {
+      const photo = images.filter(image=>image.lot_id===lot.id).sort((a,b)=>a.sort_order-b.sort_order)[0];
+      return {lot_id:lot.id,title:lot.title,sale_price:lot.winning_bid,completed_at:lot.sold_at,seller_name:'History Seller',buyer_name:'History Buyer',is_buyer:lot.highest_bidder_id===account,image_url:photo?.image_url??null,storage_path:photo?.storage_path??null};
+    }));
+  }
   if (url.pathname.endsWith('/rpc/my_completed_auctions')) {
     const account = requestAccount(req);
     return reply(lots.filter(lot => lot.status === 'SOLD' && account && (lot.seller_id === account || lot.highest_bidder_id === account)).map(lot => ({ lot_id: lot.id, sale_price: lot.winning_bid, completed_at: lot.sold_at, seller_name: 'History Seller', buyer_name: 'History Buyer', is_buyer: lot.highest_bidder_id === account })));
   }
   if (url.pathname.endsWith('/rpc/auction_server_time')) return reply(new Date().toISOString());
-  if (url.pathname.endsWith('/rpc/advance_room_lifecycle')) { const data = await body(); return reply(lots.find(lot => lot.room_id === data.p_room_id) ?? null); }
+  if (url.pathname.endsWith('/rpc/advance_room_lifecycle')) { const data = await body(); return reply(lots.find(lot => lot.room_id === data.p_room_id && ['PREVIEW','FIRST_BID_WINDOW','ACTIVE_BIDDING'].includes(lot.status)) ?? null); }
   if (url.pathname.endsWith('/rpc/lot_watchlist_count')) { const data = await body(); return reply(watchlist.filter(item => item.lot_id === data.p_lot_id).length); }
   if (accountsEnabled && url.pathname === '/auth/v1/token') {
     const data = await body(); const account = data.email === 'one@example.test' ? accountA : data.email === 'two@example.test' ? accountB : null;
@@ -185,6 +226,13 @@ const server = createServer(async (req, res) => {
     if (filter.startsWith('in.(')) rows = rows.filter(row => filter.slice(4, -1).split(',').includes(String(row[column])));
     if (filter === 'is.null') rows = rows.filter(row => row[column] === null);
   }
+  const order = url.searchParams.get('order');
+  if (order) rows = [...rows].sort((a,b)=>{
+    for(const part of order.split(',')) { const [column,direction] = part.split('.'); const delta = a[column] < b[column] ? -1 : a[column] > b[column] ? 1 : 0; if(delta) return direction === 'desc' ? -delta : delta; }
+    return 0;
+  });
+  const offset = Number(url.searchParams.get('offset') ?? 0), limit = Number(url.searchParams.get('limit') ?? 1000);
+  if (req.method === 'GET') rows = rows.slice(offset, offset + limit);
   if (url.pathname.endsWith('/notifications') && req.method === 'PATCH') {
     const data = await body();
     if (Object.keys(data).some(key => key !== 'read_at')) return reply({ message: 'permission denied' }, 403);
@@ -200,10 +248,12 @@ const server = createServer(async (req, res) => {
     return reply(null);
   }
   if (req.method === 'HEAD') { res.setHeader('Content-Range', `0-0/${rows.length}`); return reply(null); }
+  const selection = url.searchParams.get('select');
+  if (selection && selection !== '*') rows = rows.map(row=>Object.fromEntries(selection.split(',').filter(column=>column in row).map(column=>[column,row[column]])));
   return reply(rows);
 });
 server.listen(54399, '127.0.0.1');
-const child = spawn(process.execPath, ['node_modules/next/dist/bin/next', 'dev', '--hostname', '127.0.0.1', '--port', '3005'], {
+const child = spawn(process.execPath, ['node_modules/next/dist/bin/next', process.env.PERFORMANCE_NEXT_START === '1' ? 'start' : 'dev', '--hostname', '127.0.0.1', '--port', '3005'], {
   stdio: 'inherit', windowsHide: true,
   env: { ...process.env, NEXT_PUBLIC_SUPABASE_URL: 'http://127.0.0.1:54399', NEXT_PUBLIC_SUPABASE_ANON_KEY: 'sb_publishable_browser_test', AUCTION_DEMO_MODE: 'true' },
 });

@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -15,7 +16,7 @@ function getSupabaseConfig() {
   return { supabaseUrl, supabaseAnonKey };
 }
 
-export async function createSupabaseServerClient(): Promise<SupabaseClient<Database>> {
+export const createSupabaseServerClient = cache(async (): Promise<SupabaseClient<Database>> => {
   const { supabaseUrl, supabaseAnonKey } = getSupabaseConfig();
   const cookieStore = await cookies();
   return createServerClient<Database>(supabaseUrl, supabaseAnonKey, {
@@ -27,6 +28,6 @@ export async function createSupabaseServerClient(): Promise<SupabaseClient<Datab
       },
     },
   });
-}
+});
 
 export const getSupabaseServerClient = createSupabaseServerClient;

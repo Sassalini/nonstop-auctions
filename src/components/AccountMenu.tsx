@@ -12,12 +12,10 @@ export function AccountMenu() {
   useEffect(() => {
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) return;
     const supabase = createSupabaseBrowserClient();
-    let cancelled = false;
-    void supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!cancelled) setName(user ? "My account" : null);
-    });
+    // INITIAL_SESSION supplies the display state; authorization remains in
+    // verified server pages and database RLS, not this navigation label.
     const { data } = supabase.auth.onAuthStateChange((_event, session) => setName(session?.user ? "My account" : null));
-    return () => { cancelled = true; data.subscription.unsubscribe(); };
+    return () => { data.subscription.unsubscribe(); };
   }, []);
   return <div className="flex items-center gap-1">
     <Link href={name ? "/my-auctions" : "/login"} aria-label={name ?? "Sign in"} className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.045] px-2.5 py-2 text-sm text-auction-ivory transition hover:border-auction-gold/40">

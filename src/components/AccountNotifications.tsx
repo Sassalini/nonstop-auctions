@@ -34,7 +34,6 @@ export function AccountNotifications() {
     }
     const supabase = createSupabaseBrowserClient();
     let cancelled = false;
-    let version = 0;
     const switchAccount = (id: string | null) => {
       if (cancelled) return;
       if (accountRef.current !== id) {
@@ -44,14 +43,9 @@ export function AccountNotifications() {
       setCheckedAccount(true);
     };
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      version++;
       // No awaited Supabase work inside this callback (avoids auth-lock deadlocks).
       switchAccount(session?.user.id ?? null);
     });
-    const requestVersion = version;
-    void supabase.auth.getUser().then(({ data: { user } }) => {
-      if (version === requestVersion) switchAccount(user?.id ?? null);
-    }).catch(() => { if (version === requestVersion) switchAccount(null); });
     return () => { cancelled = true; listener.subscription.unsubscribe(); };
   }, []);
 
@@ -60,7 +54,11 @@ export function AccountNotifications() {
     const supabase = createSupabaseBrowserClient();
     let cancelled = false;
     let request = 0;
-    const refresh = async () => {
+    let pending = false;
+    let trailing = false;
+    const refresh = async (force = false) => {
+      if (pending) { if (force) trailing = true; return; }
+      pending = true;
       const version = ++request;
       try {
         const [list, count] = await Promise.all([
@@ -74,12 +72,15 @@ export function AccountNotifications() {
         setItems(list.data ?? []); setUnread(count.count ?? 0); setError("");
       } catch {
         if (!cancelled && version === request) setError("Could not refresh notifications. Please try again.");
+      } finally {
+        pending = false;
+        if (trailing && !cancelled) { trailing = false; void refresh(); }
       }
     };
-    refreshRef.current = () => { void refresh(); };
+    refreshRef.current = () => { void refresh(true); };
     void refresh();
     const channel = supabase.channel(`account-notifications-${account}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "notifications", filter: `user_id=eq.${account}` }, () => { void refresh(); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "notifications", filter: `user_id=eq.${account}` }, () => { void refresh(true); })
       .subscribe((status) => { if (!cancelled && status === "SUBSCRIBED") void refresh(); });
     const onVisible = () => { if (document.visibilityState === "visible") void refresh(); };
     const interval = window.setInterval(onVisible, 15000);
@@ -147,7 +148,7 @@ export function AccountNotifications() {
         {!items.length && !error ? <p className="text-sm text-auction-muted">No notifications yet.</p> : null}
         <ul className="divide-y divide-white/10">
           {items.map((item) => <li key={item.id} className={`flex gap-2 py-3 ${item.read_at ? "opacity-70" : ""}`}>
-            <Link href={item.kind === "WON" ? `/won-auctions#${item.lot_id}` : item.kind === "SELLER_SOLD" ? `/my-auctions#${item.lot_id}` : `/lots/${item.lot_id}`} prefetch={false} onClick={() => { setOpen(false); if (!item.read_at) void markRead(item.id); }} className="min-w-0 flex-1 rounded-sm focus-visible:outline-auction-gold">
+            <Link href={item.kind === "WON" ? `/won-auctions?lot=${item.lot_id}#${item.lot_id}` : item.kind === "SELLER_SOLD" ? `/my-auctions?lot=${item.lot_id}#${item.lot_id}` : `/lots/${item.lot_id}`} prefetch={false} onClick={() => { setOpen(false); if (!item.read_at) void markRead(item.id); }} className="min-w-0 flex-1 rounded-sm focus-visible:outline-auction-gold">
               <p className={`text-sm ${item.read_at ? "text-auction-ivory" : "text-auction-gold"}`}>{messages[item.kind]}</p>
               <p className="mt-1 break-words text-xs text-auction-muted">{item.lot_title}</p>
               <time className="mt-1 block text-[11px] text-auction-muted" dateTime={item.created_at}>{new Date(item.created_at).toLocaleString("en-GB")}</time>

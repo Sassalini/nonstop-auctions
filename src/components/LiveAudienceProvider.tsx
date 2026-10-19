@@ -36,17 +36,34 @@ export function LiveAudienceProvider({ children }: { children: React.ReactNode }
   const subscribed = useRef(false);
   const generation = useRef(0);
   const cancelRequests = useCallback(() => { generation.current++; }, []);
-  const refreshLots = useCallback(async () => {
-    const request = ++generation.current;
-    try {
-      const response = await fetch("/api/live-lots", { cache: "no-store" });
-      if (!response.ok) throw new Error("Live catalogue unavailable");
-      const data: { lots: LiveLotCandidate[] } = await response.json();
-      if (request === generation.current) setLots(data.lots);
-    } catch {
-      // Do not continue offering an old lot when its authoritative state is unknown.
-      if (request === generation.current) setLots([]);
+  const pending = useRef<Promise<void> | null>(null);
+  const queued = useRef(false);
+  const refreshLots = useCallback(function refresh(force = false): Promise<void> {
+    if (pending.current) {
+      // Initial mount/subscription can share a read. An actual change arriving
+      // during a read needs one trailing read so a transition cannot be missed.
+      if (force) queued.current = true;
+      return pending.current;
     }
+    const request = ++generation.current;
+    const promise = (async () => {
+      try {
+        const response = await fetch("/api/live-lots", { cache: "no-store" });
+        if (!response.ok) throw new Error("Live catalogue unavailable");
+        const data: { lots: LiveLotCandidate[] } = await response.json();
+        if (request === generation.current) setLots(data.lots);
+      } catch {
+        if (request === generation.current) setLots([]);
+      }
+    })().finally(() => {
+      if (pending.current === promise) pending.current = null;
+      if (queued.current && request === generation.current) {
+        queued.current = false;
+        void refresh();
+      }
+    });
+    pending.current = promise;
+    return promise;
   }, []);
   const trackCurrentLot = useCallback(() => {
     const channel = channelRef.current;
@@ -77,7 +94,7 @@ export function LiveAudienceProvider({ children }: { children: React.ReactNode }
     let refreshTimeout: number | undefined;
     const requestRefresh = () => {
       if (cancelled || refreshTimeout !== undefined) return;
-      refreshTimeout = window.setTimeout(() => { refreshTimeout = undefined; void refreshLots(); }, 150);
+      refreshTimeout = window.setTimeout(() => { refreshTimeout = undefined; void refreshLots(true); }, 150);
     };
     const channel = supabase.channel("auction-live-audience", {
       config: { presence: { key: anonymousSessionKey(), enabled: true } },
@@ -108,6 +125,8 @@ export function LiveAudienceProvider({ children }: { children: React.ReactNode }
     return () => {
       cancelled = true;
       cancelRequests();
+      queued.current = false;
+      pending.current = null;
       subscribed.current = false;
       channelRef.current = null;
       window.clearInterval(interval);

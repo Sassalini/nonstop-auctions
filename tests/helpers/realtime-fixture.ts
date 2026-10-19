@@ -8,6 +8,8 @@ type Channel = { key: string; ref?: string; meta?: { lot_id: string; phx_ref: st
 // installed SDK's join/track/untrack/rejoin and presence-state machinery.
 // Hosted Supabase heartbeat expiry, RLS delivery and load still need staging.
 export class RealtimeFixture {
+  private totals = { joins: 0, leaves: 0, tracks: 0 };
+  snapshot() { return { ...this.totals, sockets: this.sockets.size, channels: [...this.sockets.values()].reduce((count, channels) => count + channels.size, 0) }; }
   private sockets = new Map<WebSocketRoute, Map<string, Channel>>();
   private sequence = 0;
   private arrayProtocol = new Map<WebSocketRoute, boolean>();
@@ -38,18 +40,21 @@ export class RealtimeFixture {
       ...message, event: 'phx_reply', payload: { status: 'ok', response },
     });
     if (message.event === 'phx_join') {
+      this.totals.joins++;
       const config = message.payload.config as { presence?: { key?: string }; postgres_changes?: Omit<Binding, 'id'>[] };
       const bindings = (config.postgres_changes ?? []).map(binding => ({ ...binding, id: ++this.sequence }));
       channels.set(message.topic, { key: config.presence?.key ?? `untracked-${++this.sequence}`, ref: message.ref, bindings });
       reply({ postgres_changes: bindings });
       this.syncPresence();
     } else if (message.event === 'presence') {
+      this.totals.tracks++;
       const channel = channels.get(message.topic);
       if (channel) channel.meta = message.payload.event === 'track'
         ? { ...(message.payload.payload as { lot_id: string }), phx_ref: String(++this.sequence) }
         : undefined;
       reply(); this.syncPresence();
     } else if (message.event === 'phx_leave') {
+      this.totals.leaves++;
       channels.delete(message.topic); reply(); this.syncPresence();
     } else { reply(); }
   }

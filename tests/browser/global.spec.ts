@@ -104,7 +104,7 @@ test('notification bell is account-specific, marks read, opens lots and refetche
     await expect(a.getByRole('button', { name: 'Notifications', exact: true })).toBeVisible();
     await expect(b.getByRole('button', { name: 'Notifications (1 unread)', exact: true })).toBeVisible();
     await a.getByRole('region', { name: 'Account notifications' }).getByRole('link').first().click();
-    await expect(a).toHaveURL(new RegExp(`/won-auctions#${hall}$`));
+    await expect(a).toHaveURL(new RegExp(`/won-auctions\\?lot=${hall}#${hall}$`));
     await a.goto(`/lots/${hall}`);
     await expect(a.getByTestId('watchlist-count')).toHaveText('2 watching');
     await a.getByRole('button', { name: 'Watching', exact: true }).click();

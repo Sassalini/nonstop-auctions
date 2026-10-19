@@ -2,6 +2,9 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function middleware(request: NextRequest) {
+  // This route reads anonymous public IDs only and never consumes a session.
+  // Avoid a remote auth lookup on each live-navigation refresh.
+  if (request.nextUrl.pathname === "/api/live-lots") return NextResponse.next();
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !key || !request.cookies.getAll().some(cookie => cookie.name.startsWith("sb-"))) {

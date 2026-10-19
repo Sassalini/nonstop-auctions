@@ -1,0 +1,186 @@
+{
+  "baselineCommit": "e330992",
+  "apiDelayMs": 150,
+  "dataset": {
+    "rooms": 2,
+    "currentLots": 2,
+    "waitingLots": 12,
+    "soldLots": 240,
+    "photos": 762,
+    "purchasesForAccount": 120,
+    "salesForAccount": 120,
+    "watchedLotsForAccount": 1
+  },
+  "method": "Local next start, separate fresh before/after processes. First visit to each route followed by three warm loads. First-visit figures are route-first, not isolated process/Cloudflare cold starts. Warm is median of three. Raw HTML response consumed without executing browser JavaScript. Rounded milliseconds from logged measurements; database CPU is measured separately with PGlite.",
+  "pages": [
+    {
+      "name": "home",
+      "before": {
+        "firstVisitMs": 1720,
+        "warmMedianMs": 1591,
+        "requests": 10,
+        "returnedRowsIncludingSigningResponses": 1824,
+        "apiBytes": 653622,
+        "serverAuthRequests": 0
+      },
+      "after": {
+        "firstVisitMs": 905,
+        "warmMedianMs": 789,
+        "requests": 8,
+        "returnedRowsIncludingSigningResponses": 58,
+        "apiBytes": 19327,
+        "serverAuthRequests": 0
+      }
+    },
+    {
+      "name": "room",
+      "before": {
+        "firstVisitMs": 1588,
+        "warmMedianMs": 1590,
+        "requests": 10,
+        "returnedRowsIncludingSigningResponses": 1824,
+        "apiBytes": 653622,
+        "serverAuthRequests": 0
+      },
+      "after": {
+        "firstVisitMs": 787,
+        "warmMedianMs": 787,
+        "requests": 8,
+        "returnedRowsIncludingSigningResponses": 58,
+        "apiBytes": 19327,
+        "serverAuthRequests": 0
+      }
+    },
+    {
+      "name": "lot",
+      "before": {
+        "firstVisitMs": 2287,
+        "warmMedianMs": 2216,
+        "requests": 15,
+        "returnedRowsIncludingSigningResponses": 1835,
+        "apiBytes": 657079,
+        "serverAuthRequests": 0
+      },
+      "after": {
+        "firstVisitMs": 1106,
+        "warmMedianMs": 1104,
+        "requests": 12,
+        "returnedRowsIncludingSigningResponses": 66,
+        "apiBytes": 21943,
+        "serverAuthRequests": 0
+      }
+    },
+    {
+      "name": "my-auctions",
+      "before": {
+        "firstVisitMs": 1718,
+        "warmMedianMs": 1648,
+        "requests": 14,
+        "returnedRowsIncludingSigningResponses": 2985,
+        "apiBytes": 995097,
+        "serverAuthRequests": 2
+      },
+      "after": {
+        "firstVisitMs": 1149,
+        "warmMedianMs": 1114,
+        "requests": 12,
+        "returnedRowsIncludingSigningResponses": 115,
+        "apiBytes": 37572,
+        "serverAuthRequests": 2
+      }
+    },
+    {
+      "name": "won-auctions",
+      "before": {
+        "firstVisitMs": 841,
+        "warmMedianMs": 837,
+        "requests": 6,
+        "returnedRowsIncludingSigningResponses": 1082,
+        "apiBytes": 270392,
+        "serverAuthRequests": 2
+      },
+      "after": {
+        "firstVisitMs": 653,
+        "warmMedianMs": 651,
+        "requests": 4,
+        "returnedRowsIncludingSigningResponses": 103,
+        "apiBytes": 34375,
+        "serverAuthRequests": 2
+      }
+    },
+    {
+      "name": "room-authenticated",
+      "before": {
+        "firstVisitMs": 1758,
+        "warmMedianMs": 1745,
+        "requests": 11,
+        "returnedRowsIncludingSigningResponses": 1825,
+        "apiBytes": 653822,
+        "serverAuthRequests": 1
+      },
+      "after": {
+        "firstVisitMs": 949,
+        "warmMedianMs": 947,
+        "requests": 9,
+        "returnedRowsIncludingSigningResponses": 59,
+        "apiBytes": 19521,
+        "serverAuthRequests": 1
+      }
+    }
+  ],
+  "browserProtocolFixture": {
+    "method": "One authenticated browser session; hard navigations followed by 2 seconds for hydration/background work; fixed local API delay 150 ms. Counts exclude static assets. Realtime is protocol-emulated, not a hosted load test.",
+    "before": [
+      {
+        "name": "room",
+        "headingMs": 1616,
+        "browserRequests": 20,
+        "supabaseRequests": 41,
+        "liveCatalogueRequests": 2,
+        "activeRealtimeChannels": 3
+      },
+      {
+        "name": "room-switch",
+        "headingMs": 1470,
+        "browserRequests": 20,
+        "supabaseRequests": 41,
+        "liveCatalogueRequests": 2,
+        "activeRealtimeChannels": 3
+      },
+      {
+        "name": "my-auctions",
+        "headingMs": 1179,
+        "browserRequests": 12,
+        "supabaseRequests": 26,
+        "liveCatalogueRequests": 2,
+        "activeRealtimeChannels": 2
+      }
+    ],
+    "after": [
+      {
+        "name": "room",
+        "headingMs": 924,
+        "browserRequests": 15,
+        "supabaseRequests": 29,
+        "liveCatalogueRequests": 1,
+        "activeRealtimeChannels": 3
+      },
+      {
+        "name": "room-switch",
+        "headingMs": 865,
+        "browserRequests": 15,
+        "supabaseRequests": 29,
+        "liveCatalogueRequests": 1,
+        "activeRealtimeChannels": 3
+      },
+      {
+        "name": "my-auctions",
+        "headingMs": 850,
+        "browserRequests": 8,
+        "supabaseRequests": 19,
+        "liveCatalogueRequests": 1,
+        "activeRealtimeChannels": 2
+      }
+    ]
+  }
+}
