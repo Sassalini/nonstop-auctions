@@ -13,6 +13,8 @@ const messages: Record<NotificationKind, string> = {
   WON: "You won this auction",
   SELLER_LIVE: "Your listed lot is now open for bidding",
   SELLER_SOLD: "Your listed lot has sold",
+  SELLER_FIRST_BID: "Your listing received its first bid",
+  WATCHED_FIRST_BID: "A watched lot received its first bid",
 };
 
 export function AccountNotifications() {

@@ -56,6 +56,7 @@ const visibleLotStatuses: LotStatus[] = [
   "SOLD",
   "UNSOLD",
   "CANCELLED",
+  "EXPIRED",
 ];
 
 const upcomingLotStatuses: LotStatus[] = [

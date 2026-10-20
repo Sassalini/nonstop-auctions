@@ -16,3 +16,10 @@ export async function validatePhoto(file: File): Promise<void> {
   const bitmap = await createImageBitmap(file).catch(() => { throw new Error(`${file.name} is not a readable image.`); });
   bitmap.close();
 }
+
+export const MAX_AUTO_RELISTINGS = 100;
+export function parseRelistingLimit(value: string): number | null {
+  if (!/^\d{1,3}$/.test(value.trim())) return null;
+  const limit = Number(value.trim());
+  return Number.isInteger(limit) && limit >= 0 && limit <= MAX_AUTO_RELISTINGS ? limit : null;
+}

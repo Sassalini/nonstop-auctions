@@ -45,7 +45,7 @@ export function AuctionDashboard({
       roomCurrentLotId: roomCurrentLot?.id, isLotRoute });
     if (target && target !== pathname) router.replace(target, { scroll: false });
   }, [ready, enabled, currentLot, roomCurrentLot?.id, activeRoom?.id, pathname, router]);
-  const completed = currentLot && ["SOLD", "UNSOLD", "CANCELLED"].includes(currentLot.auctionStatus);
+  const completed = currentLot && ["SOLD", "UNSOLD", "EXPIRED", "CANCELLED"].includes(currentLot.auctionStatus);
   return (
     <AuctionClockProvider databaseRoomId={activeRoom?.databaseId}>
       {activeRoom && !activeRoom.databaseId ? <p className="border-b border-auction-gold/20 bg-auction-black px-4 py-2 text-center text-xs text-auction-gold">Demonstration catalogue · Real bidding is unavailable</p> : null}

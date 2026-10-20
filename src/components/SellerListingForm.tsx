@@ -6,7 +6,8 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Upload, X } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import { MAX_PHOTOS, PHOTO_BUCKET, parseStartingBid, photoExtensions, validatePhoto } from "@/lib/seller-validation";
+import { RelistingControls } from "@/components/RelistingControls";
+import { parseRelistingLimit, MAX_PHOTOS, PHOTO_BUCKET, parseStartingBid, photoExtensions, validatePhoto } from "@/lib/seller-validation";
 import type { AuctionRoomRow, LotImageRow, LotRow } from "@/lib/supabase/types";
 
 type Photo = { id: string; url: string; file?: File; path?: string; uploaded: boolean };
@@ -19,6 +20,8 @@ export function SellerListingForm({ rooms, userId, draft, initialPhotos, loadErr
   const [title, setTitle] = useState(draft?.title ?? "");
   const [roomId, setRoomId] = useState(draft?.room_id ?? "");
   const [startingBid, setStartingBid] = useState(draft ? String(draft.starting_bid) : "");
+  const [relistingLimit, setRelistingLimit] = useState(String(draft?.max_auto_relistings ?? 5));
+  const [unlimited, setUnlimited] = useState(draft?.relist_unlimited ?? false);
   const [description, setDescription] = useState(draft?.description ?? "");
   const [photos, setPhotos] = useState<Photo[]>(initialPhotos.map(photo => ({ id: photo.id, url: photo.image_url, path: photo.storage_path ?? undefined, uploaded: Boolean(photo.image_url) })));
   const [busy, setBusy] = useState(false);
@@ -63,6 +66,8 @@ export function SellerListingForm({ rooms, userId, draft, initialPhotos, loadErr
     event.preventDefault();
     if (working.current) return;
     const amount = parseStartingBid(startingBid);
+    const retries = unlimited ? parseRelistingLimit(relistingLimit) ?? 5 : parseRelistingLimit(relistingLimit);
+    if (retries === null) { setMessage("Automatic relistings must be a whole number from 0 to 100."); return; }
     if (!userId) { setMessage("Sign in before submitting a listing."); return; }
     if (!title.trim() || !description.trim() || !rooms.some(room => room.id === roomId)) { setMessage("Enter a title, item description and active auction room."); return; }
     if (amount === null) { setMessage("Enter a positive starting bid in GBP with no more than two decimal places."); return; }
@@ -75,8 +80,8 @@ export function SellerListingForm({ rooms, userId, draft, initialPhotos, loadErr
       const cacheKey = `nonstop-seller-submission:${userId}`;
       keyRef.current ??= sessionStorage.getItem(cacheKey) ?? crypto.randomUUID();
       sessionStorage.setItem(cacheKey, keyRef.current);
-      const saved = await client.rpc("save_seller_draft", { p_submission_key: keyRef.current, p_room_id: roomId,
-        p_title: title.trim(), p_description: description.trim(), p_starting_bid: amount });
+      const saved = await client.rpc("save_seller_draft_with_relisting", { p_submission_key: keyRef.current, p_room_id: roomId,
+        p_title: title.trim(), p_description: description.trim(), p_starting_bid: amount, p_relist_unlimited: unlimited, p_max_auto_relistings: retries });
       if (saved.error) throw saved.error;
       lotRef.current = saved.data;
       if (saved.data.status === "DRAFT") {
@@ -120,6 +125,7 @@ export function SellerListingForm({ rooms, userId, draft, initialPhotos, loadErr
         <label className="space-y-2"><span className="text-sm font-medium text-auction-ivory">Starting bid (GBP)</span><input required inputMode="decimal" value={startingBid} onChange={event => setStartingBid(event.target.value)} className={`${fieldClass} h-11`} aria-describedby="starting-bid-help" /></label>
         <p id="starting-bid-help" className="self-center text-xs leading-5 text-auction-muted">Enter pounds and pence, for example 25.50. Auctions have no reserve. Later bids use the existing £50 minimum increment.</p>
       </div>
+      <RelistingControls prefix="seller-new" limit={relistingLimit} unlimited={unlimited} onLimit={setRelistingLimit} onUnlimited={setUnlimited} />
       <label className="mt-5 block space-y-2"><span id="seller-description-label" className="text-sm font-medium text-auction-ivory">Item Description</span><span id="item-description-help" className="block text-xs leading-5 text-auction-muted">Please add in as much detail all relevant details about the item including: Condition, Age, History, Dimensions and measurements, Maker information, Known repairs.</span>
         <textarea aria-labelledby="seller-description-label" required maxLength={10000} rows={5} value={description} onChange={event => setDescription(event.target.value)} aria-describedby="item-description-help" className={`${fieldClass} resize-y py-3`} />
       </label>

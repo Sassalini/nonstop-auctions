@@ -17,7 +17,8 @@ const statusLabels: Record<LotStatus, string> = {
   ACTIVE_BIDDING: "Live",
   SOLD: "Sold",
   UNSOLD: "No bids — returned to queue",
-  CANCELLED: "Cancelled",
+  EXPIRED: "Unsold — relistings finished",
+  CANCELLED: "Removed",
 };
 
 const compactStatusLabels: Record<LotStatus, string> = {
@@ -28,7 +29,8 @@ const compactStatusLabels: Record<LotStatus, string> = {
   ACTIVE_BIDDING: "Live",
   SOLD: "Sold",
   UNSOLD: "Returned",
-  CANCELLED: "Cancelled",
+  EXPIRED: "Unsold — relistings finished",
+  CANCELLED: "Removed",
 };
 
 const timerLabels: Record<LotStatus, string> = {
@@ -39,7 +41,8 @@ const timerLabels: Record<LotStatus, string> = {
   ACTIVE_BIDDING: "Time remaining",
   SOLD: "Sold",
   UNSOLD: "No bids — returned to queue",
-  CANCELLED: "Cancelled",
+  EXPIRED: "Unsold — relistings finished",
+  CANCELLED: "Removed",
 };
 
 const badgeVariants: Record<LotStatus, AuctionStatusVariant> = {
@@ -50,6 +53,7 @@ const badgeVariants: Record<LotStatus, AuctionStatusVariant> = {
   ACTIVE_BIDDING: "active",
   SOLD: "sold",
   UNSOLD: "unavailable",
+  EXPIRED: "unavailable",
   CANCELLED: "waiting",
 };
 

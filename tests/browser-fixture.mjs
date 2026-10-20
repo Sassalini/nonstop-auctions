@@ -24,7 +24,10 @@ let photoObjects = new Map();
 let failUpload = false;
 let uploadsBeforeFailure = null;
 let loseSubmitResponse = false;
-const createLot = (status = 'PREVIEW') => ({ id, room_id: room.id, seller_id: '00000000-0000-0000-0000-000000000101',
+const createLot = (status = 'PREVIEW') => ({
+  relist_unlimited:false,max_auto_relistings:5,auto_relistings_used:0,completed_attempts:0,
+  final_unsold_at:null,removal_requested_at:null,removed_at:null,pending_relist_unlimited:null,pending_max_auto_relistings:null,
+  id, room_id: room.id, seller_id: '00000000-0000-0000-0000-000000000101',
   title: 'Release test catalogue item', description: 'Catalogue description', condition_report: 'Condition report', shipping_info: 'Collection information',
   starting_bid: 100, current_bid: 100, minimum_increment: 10, bid_count: status === 'ACTIVE_BIDDING' ? 1 : 0,
   status, preview_duration_seconds: 30, first_bid_duration_seconds: 30, bid_extension_seconds: 5, requeue_delay_days: 7,
@@ -101,6 +104,13 @@ const server = createServer(async (req, res) => {
         return { id:`${lot.id}-${i}`, lot_id:lot.id,storage_path:path,image_url:`storage:lot-photos/${path}`,sort_order:i,created_at:new Date().toISOString() };
       }));
     }
+    if (state.mode === 'management') {
+      accountsEnabled=true;rooms=[room];
+      lots=[{...createLot('WAITING'),seller_id:accountA,title:'Queued managed listing'},
+        {...createLot('PREVIEW'),id:'20000000-0000-0000-0000-000000000702',seller_id:accountA,title:'Active managed listing'},
+        {...createLot('EXPIRED'),id:'20000000-0000-0000-0000-000000000703',seller_id:accountA,title:'Exhausted managed listing',max_auto_relistings:0,completed_attempts:1,final_unsold_at:new Date().toISOString()}];
+      images=lots.map(lot=>({id:lot.id,lot_id:lot.id,image_url:'/images/auction-house-background.png',sort_order:0}));
+    }
     if (state.mode === 'history') {
       accountsEnabled = true; rooms = [room];
       lots = [{ ...createLot('SOLD'), seller_id: accountA, highest_bidder_id: accountB, winning_bid: 125.50, current_bid: 125.50, sold_at: new Date().toISOString(), title: 'Completed history item' }];
@@ -163,13 +173,28 @@ const server = createServer(async (req, res) => {
   if (url.pathname.startsWith('/rest/v1/rpc/') && /seller/.test(url.pathname)) {
     if (!account) return reply({ message: 'Sign in first' },401);
     const data = await body();
-    if (url.pathname.endsWith('/save_seller_draft')) {
+    if (url.pathname.endsWith('/save_seller_draft') || url.pathname.endsWith('/save_seller_draft_with_relisting')) {
       const existing = lots.find(lot => lot.seller_id === account && lot.submission_key === data.p_submission_key);
-      if (existing) return reply(existing);
-      const created = { ...createLot('DRAFT'), id: randomUUID(), seller_id: account, submission_key: data.p_submission_key, room_id: data.p_room_id, title: data.p_title, description: data.p_description, starting_bid: data.p_starting_bid, current_bid: 0, ends_at: null, queue_position: 0 };
+      if (existing) { if(existing.status==='DRAFT'){existing.relist_unlimited=data.p_relist_unlimited??existing.relist_unlimited;existing.max_auto_relistings=data.p_max_auto_relistings??existing.max_auto_relistings;} return reply(existing); }
+      const created = { ...createLot('DRAFT'), id: randomUUID(), seller_id: account, submission_key: data.p_submission_key, room_id: data.p_room_id, title: data.p_title, description: data.p_description, starting_bid: data.p_starting_bid, relist_unlimited:data.p_relist_unlimited??false,max_auto_relistings:data.p_max_auto_relistings??5,current_bid: 0, ends_at: null, queue_position: 0 };
       lots.push(created); return reply(created);
     }
     const lot = lots.find(lot => lot.id === data.p_lot_id && lot.seller_id === account);
+    if (url.pathname.endsWith('/manage_seller_listing')) {
+      if (!lot || ['DRAFT','SOLD'].includes(lot.status)) return reply({message:'Listing not found or cannot be managed'},400);
+      const active=['PREVIEW','FIRST_BID_WINDOW','ACTIVE_BIDDING'].includes(lot.status);
+      if (data.p_remove) {
+        lot.removal_requested_at??=new Date().toISOString();
+        if(!active){lot.status='CANCELLED';lot.removed_at=lot.removal_requested_at;}
+      } else if(active) {
+        lot.pending_relist_unlimited=data.p_relist_unlimited;lot.pending_max_auto_relistings=data.p_max_auto_relistings;
+      } else {
+        lot.relist_unlimited=data.p_relist_unlimited;lot.max_auto_relistings=data.p_max_auto_relistings;
+        if(lot.status==='UNSOLD'&&!lot.relist_unlimited&&lot.auto_relistings_used>lot.max_auto_relistings){lot.status='EXPIRED';lot.final_unsold_at=new Date().toISOString();}
+        else if(lot.status==='EXPIRED'&&(lot.relist_unlimited||lot.auto_relistings_used<lot.max_auto_relistings||(lot.completed_attempts>0&&lot.auto_relistings_used>=lot.completed_attempts&&lot.auto_relistings_used===lot.max_auto_relistings))) {if(!(lot.completed_attempts>0&&lot.auto_relistings_used>=lot.completed_attempts))lot.auto_relistings_used++;lot.status='UNSOLD';lot.final_unsold_at=null;}
+      }
+      return reply(lot);
+    }
     if (url.pathname.endsWith('/prepare_seller_photo') && lot) {
       let image = images.find(image => image.id === data.p_image_id);
       if (!image) {

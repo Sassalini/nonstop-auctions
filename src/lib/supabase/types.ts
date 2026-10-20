@@ -14,6 +14,7 @@ export type LotStatus =
   | "ACTIVE_BIDDING"
   | "SOLD"
   | "UNSOLD"
+  | "EXPIRED"
   | "CANCELLED";
 
 export type ProfileRow = {
@@ -35,6 +36,15 @@ export type AuctionRoomRow = {
 };
 
 export type LotRow = {
+  relist_unlimited: boolean;
+  max_auto_relistings: number;
+  auto_relistings_used: number;
+  completed_attempts: number;
+  final_unsold_at: string | null;
+  removal_requested_at: string | null;
+  removed_at: string | null;
+  pending_relist_unlimited: boolean | null;
+  pending_max_auto_relistings: number | null;
   submission_key: string | null;
   id: string;
   room_id: string;
@@ -94,7 +104,7 @@ export type WatchlistRow = {
   created_at: string;
 };
 
-export type NotificationKind = "WATCHED_LIVE" | "WATCHED_SOLD" | "WATCHED_UNSOLD" | "WON" | "SELLER_LIVE" | "SELLER_SOLD";
+export type NotificationKind = "WATCHED_LIVE" | "WATCHED_SOLD" | "WATCHED_UNSOLD" | "WON" | "SELLER_LIVE" | "SELLER_SOLD" | "SELLER_FIRST_BID" | "WATCHED_FIRST_BID";
 export type NotificationRow = {
   id: string;
   user_id: string;
@@ -278,6 +288,8 @@ export type Database = {
     };
     Views: Record<string, never>;
     Functions: {
+      save_seller_draft_with_relisting: { Args: { p_submission_key: string; p_room_id: string; p_title: string; p_description: string; p_starting_bid: number; p_relist_unlimited: boolean; p_max_auto_relistings: number }; Returns: LotRow };
+      manage_seller_listing: { Args: { p_lot_id: string; p_relist_unlimited?: boolean; p_max_auto_relistings?: number; p_remove?: boolean }; Returns: LotRow };
       completed_auctions_page: { Args: { p_mode: "buyer" | "seller"; p_limit?: number; p_offset?: number; p_lot_id?: string }; Returns: { lot_id: string; title: string; sale_price: number; completed_at: string; seller_name: string; buyer_name: string; is_buyer: boolean; image_url: string | null; storage_path: string | null }[] };
       my_completed_auctions: { Args: Record<string, never>; Returns: { lot_id: string; sale_price: number; completed_at: string; seller_name: string; buyer_name: string; is_buyer: boolean }[] };
       save_seller_draft: { Args: { p_submission_key: string; p_room_id: string; p_title: string; p_description: string; p_starting_bid: number }; Returns: LotRow };
