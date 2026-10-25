@@ -39,7 +39,7 @@ export type AuctionRoom = MockAuctionRoom & {
 
 type SupabaseReadClient = SupabaseClient<Database>;
 
-type AuctionLotRow = Pick<LotRow, "id" | "room_id" | "title" | "description" | "condition_report" | "shipping_info" | "starting_bid" | "current_bid" | "bid_count" | "minimum_increment" | "preview_duration_seconds" | "status" | "starts_at" | "preview_starts_at" | "bidding_starts_at" | "ends_at" | "next_eligible_at" | "queue_position" | "winning_bid" | "is_premium" | "created_at">;
+type AuctionLotRow = Pick<LotRow, "lot_reference" | "id" | "room_id" | "title" | "description" | "condition_report" | "shipping_info" | "starting_bid" | "current_bid" | "bid_count" | "minimum_increment" | "preview_duration_seconds" | "status" | "starts_at" | "preview_starts_at" | "bidding_starts_at" | "ends_at" | "next_eligible_at" | "queue_position" | "winning_bid" | "is_premium" | "created_at">;
 
 type SupabaseLotBundle = {
   lot: AuctionLotRow;
@@ -140,7 +140,7 @@ function formatStartsIn(lot: AuctionLotRow) {
   }
 
   if (lot.status === "UNSOLD") {
-    return "Returned to queue";
+    return "Queued";
   }
 
   if (lot.status === "WAITING") {
@@ -158,7 +158,7 @@ function buildDetails(lot: AuctionLotRow, room?: AuctionRoomRow) {
   ];
 }
 
-function mapSupabaseLot(bundle: SupabaseLotBundle, lotNumber: number): Lot {
+function mapSupabaseLot(bundle: SupabaseLotBundle): Lot {
   const { lot, room, images, bids } = bundle;
   const availableImages = images.filter(image => image.image_url);
   const galleryImageUrls = availableImages.length
@@ -171,7 +171,7 @@ function mapSupabaseLot(bundle: SupabaseLotBundle, lotNumber: number): Lot {
 
   return {
     id: lot.id,
-    lotNumber,
+    lotNumber: toNumber(lot.lot_reference),
     roomId: room?.slug ?? lot.room_id,
     title: lot.title,
     category: room?.name ?? "Auction",
@@ -230,7 +230,7 @@ function getMockRoomBySlug(roomSlug: string) {
   return getMockAuctionRooms().find((room) => room.slug === roomSlug || room.id === roomSlug);
 }
 
-async function fetchLotImages(client: SupabaseReadClient, lotIds: string[]) {
+async function fetchLotImages(client: SupabaseReadClient, lotIds: string[], thumbnailOnly = false) {
   if (!lotIds.length) {
     return new Map<string, LotImageRow[]>();
   }
@@ -239,7 +239,7 @@ async function fetchLotImages(client: SupabaseReadClient, lotIds: string[]) {
     .from("lot_images")
     .select(imageColumns)
     .in("lot_id", lotIds)
-    .order("sort_order", { ascending: true });
+    .order("sort_order", { ascending: true }).order("id", { ascending: true });
 
   if (error || !data) {
     if (error) {
@@ -248,7 +248,12 @@ async function fetchLotImages(client: SupabaseReadClient, lotIds: string[]) {
     return new Map<string, LotImageRow[]>();
   }
 
-  const resolved = await resolveLotPhotos(client, data);
+  const seen = new Set<string>();
+  const selected = thumbnailOnly ? data.filter(image => {
+    if (seen.has(image.lot_id)) return false;
+    seen.add(image.lot_id); return true;
+  }) : data;
+  const resolved = await resolveLotPhotos(client, selected);
   return resolved.reduce((imagesByLotId, image) => {
     const lotImages = imagesByLotId.get(image.lot_id) ?? [];
     lotImages.push(image);
@@ -328,7 +333,7 @@ async function fetchSupabaseRoomAuctionState(
   const lotIds = sourceRows.map((lot) => lot.id);
   const imagesByLotId = await fetchLotImages(client, lotIds);
   const bidsByLotId = new Map<string, BidRow[]>();
-  const mappedLots = sourceRows.map((lot, index) =>
+  const mappedLots = sourceRows.map((lot) =>
     mapSupabaseLot(
       {
         lot,
@@ -336,7 +341,6 @@ async function fetchSupabaseRoomAuctionState(
         images: imagesByLotId.get(lot.id) ?? [],
         bids: bidsByLotId.get(lot.id) ?? [],
       },
-      lot.queue_position > 0 ? lot.queue_position : index + 1,
     ),
   );
   const mappedById = new Map(mappedLots.map((lot) => [lot.id, lot]));
@@ -392,7 +396,7 @@ export const getAuctionRooms = cache(async (): Promise<AuctionRoom[]> => {
   const byRoom = new Map((current.data ?? []).map(lot => [lot.room_id, lot]));
   return rooms.map(room => {
     const lot = byRoom.get(room.id);
-    return mapSupabaseRoom(room, lot ? mapSupabaseLot({ lot, room, images: images.get(lot.id) ?? [], bids: [] }, lot.queue_position || 1) : undefined);
+    return mapSupabaseRoom(room, lot ? mapSupabaseLot({ lot, room, images: images.get(lot.id) ?? [], bids: [] }) : undefined);
   });
 });
 
@@ -436,7 +440,7 @@ export async function getLotById(lotId: string) {
     client.from("auction_rooms").select(roomColumns).eq("id", lot.room_id).maybeSingle(),
     fetchLotImages(client, [lotId]),
   ]);
-  return mapSupabaseLot({ lot, room: room ?? undefined, images: images.get(lotId) ?? [], bids: [] }, lot.queue_position || 1);
+  return mapSupabaseLot({ lot, room: room ?? undefined, images: images.get(lotId) ?? [], bids: [] });
 }
 
 export async function getBidsByLotId(lotId: string) {
@@ -476,7 +480,7 @@ export async function getLotsByIds(ids: string[]): Promise<Lot[]> {
   const byRoom = new Map(rooms.map(room => [room.id, room]));
   const rows = (result.data ?? []).filter(lot => byRoom.has(lot.room_id));
   const images = await fetchLotImages(client, rows.map(lot => lot.id));
-  return rows.map((lot, index) => mapSupabaseLot({ lot, room: byRoom.get(lot.room_id), images: images.get(lot.id) ?? [], bids: [] }, lot.queue_position || index + 1));
+  return rows.map((lot) => mapSupabaseLot({ lot, room: byRoom.get(lot.room_id), images: images.get(lot.id) ?? [], bids: [] }));
 }
 
 export function getStaticRoomParams() {
@@ -558,4 +562,35 @@ export async function getLotAuctionData(lotId: string) {
     roomCurrentLot: state?.currentLot ?? null,
     upcomingLots: state?.upcomingLots ?? [],
   };
+}
+
+// Indexed exact lookup; use the caller's RLS context for owned drafts/history.
+export async function getLotByReference(reference: number) {
+  if (isDemoMode()) return mockLots.find(lot => lot.lotNumber === reference) ?? null;
+  const client = await createSupabaseServerClient();
+  const { data, error } = await client.from("lots").select(lotColumns).eq("lot_reference", reference).maybeSingle();
+  if (error) throwAuctionDataError("Could not search lot reference", error);
+  // Search results need no gallery/signing or lifecycle mutations.
+  return data ? mapSupabaseLot({ lot: data, images: [], bids: [] }) : null;
+}
+
+export async function getRoomCatalogue(roomSlug: string, page: number) {
+  noStore();
+  const size = 24;
+  const client = createSupabaseReadClient();
+  if (!client) {
+    const room = getMockRoomBySlug(roomSlug);
+    if (!room) return null;
+    const queued = getMockRoomLots(room.id).filter(lot => upcomingLotStatuses.includes(lot.auctionStatus));
+    return { lots: queued.slice((page - 1) * size, page * size), hasNext: queued.length > page * size };
+  }
+  const { data: room, error: roomError } = await client.from("auction_rooms").select(roomColumns).eq("slug", roomSlug).eq("is_active", true).maybeSingle();
+  if (roomError) throwAuctionDataError("Could not load catalogue room", roomError);
+  if (!room) return null;
+  const { data, error } = await client.from("lots").select(lotColumns).eq("room_id", room.id).in("status", upcomingLotStatuses)
+    .order("queue_position").order("created_at").order("id").range((page - 1) * size, page * size);
+  if (error) throwAuctionDataError("Could not load room catalogue", error);
+  const rows = (data ?? []).slice(0, size);
+  const images = await fetchLotImages(client, rows.map(lot => lot.id), true);
+  return { lots: rows.map(lot => mapSupabaseLot({ lot, room, images: images.get(lot.id) ?? [], bids: [] })), hasNext: (data?.length ?? 0) > size };
 }

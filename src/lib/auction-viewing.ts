@@ -5,14 +5,15 @@ export function readAutoPlayPreference(value: string | null) {
 }
 
 // Navigation only. IDs here are supplied by authoritative server catalogue reads.
-export function getAuctionViewingTarget({ ready, enabled, displayedLotId, roomCurrentLotId, isLotRoute }: {
+export function getAuctionViewingTarget({ ready, enabled, displayedLotId, roomCurrentLotId, isLotRoute, manualSelection = false }: {
+  manualSelection?: boolean;
   ready: boolean;
   enabled: boolean;
   displayedLotId?: string;
   roomCurrentLotId?: string;
   isLotRoute: boolean;
 }) {
-  if (!ready) return null;
+  if (!ready || manualSelection) return null;
   if (enabled) return roomCurrentLotId && roomCurrentLotId !== displayedLotId ? `/lots/${roomCurrentLotId}` : null;
   // Pin a room/homepage view to a durable lot URL, so refreshes update that same
   // lot's final result rather than replacing it with the room's next lot.

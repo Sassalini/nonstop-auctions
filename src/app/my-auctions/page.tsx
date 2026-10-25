@@ -24,7 +24,7 @@ export default async function MyAuctionsPage({ searchParams }: { searchParams: P
   const [{ data: watchlist, error: watchError }, { data: bids, error: bidError }, sellerResult, roomResult, history] = await Promise.all([
     supabase.from("watchlist").select("lot_id").eq("user_id", user.id),
     supabase.from("bids").select("amount").eq("bidder_id", user.id).order("amount", { ascending: false }).limit(1),
-    supabase.from("lots").select("id,room_id,title,status,starting_bid,current_bid,submission_key,relist_unlimited,max_auto_relistings,auto_relistings_used,completed_attempts,final_unsold_at,removal_requested_at,removed_at,pending_relist_unlimited,pending_max_auto_relistings").eq("seller_id", user.id).neq("status", "SOLD").order("created_at", { ascending: false }),
+    supabase.from("lots").select("lot_reference,id,room_id,title,status,starting_bid,current_bid,submission_key,relist_unlimited,max_auto_relistings,auto_relistings_used,completed_attempts,final_unsold_at,removal_requested_at,removed_at,pending_relist_unlimited,pending_max_auto_relistings").eq("seller_id", user.id).neq("status", "SOLD").order("created_at", { ascending: false }),
     supabase.from("auction_rooms").select("id,name,slug"),
     getCompletedAuctions("seller", parseHistoryPage(params.historyPage), parseHistoryLot(params.lot)),
   ]);
@@ -49,8 +49,9 @@ export default async function MyAuctionsPage({ searchParams }: { searchParams: P
         <div className="divide-y divide-white/10">{sellerResult.data?.filter(lot => lot.status !== "SOLD").map(lot => {
           const room = roomResult.data?.find(room => room.id === lot.room_id);
           return <article key={lot.id} className="py-4">
-            <h3 className="break-words font-semibold text-auction-ivory">{lot.status === "DRAFT" ? lot.title : <Link href={`/lots/${lot.id}`} className="hover:text-auction-gold">{lot.title}</Link>}</h3>
-            <p className="mt-1 text-sm text-auction-muted">{room?.name ?? "Auction room"} · {lot.status === "DRAFT" ? "Unfinished submission" : getLotStatusLabel(lot.status)} · {lot.status === "ACTIVE_BIDDING" ? `Current bid: ${formatCurrency(Number(lot.current_bid))}` : `Starting bid: ${formatCurrency(Number(lot.starting_bid))}`}</p>
+            <p className="mb-1 text-xs text-auction-muted">Lot {lot.lot_reference}</p>
+            <h3 className="break-words font-semibold text-auction-ivory">{lot.status === "DRAFT" ? lot.title : <Link href={`/lots/${lot.id}?view=manual`} className="hover:text-auction-gold">{lot.title}</Link>}</h3>
+            <p className="mt-1 text-sm text-auction-muted">{room?.name ?? "Auction room"} · {lot.status === "DRAFT" ? "Unfinished submission" : lot.status === "UNSOLD" ? "Unsold — queued for another attempt" : getLotStatusLabel(lot.status)} · {lot.status === "ACTIVE_BIDDING" ? `Current bid: ${formatCurrency(Number(lot.current_bid))}` : `Starting bid: ${formatCurrency(Number(lot.starting_bid))}`}</p>
             {lot.status === "DRAFT" && lot.submission_key ? <SellerDraftActions lotId={lot.id} submissionKey={lot.submission_key} /> : lot.status !== "DRAFT" ? <SellerListingManagement key={`${lot.id}:${lot.status}:${lot.relist_unlimited}:${lot.max_auto_relistings}:${lot.auto_relistings_used}:${lot.completed_attempts}:${lot.removal_requested_at}:${lot.pending_relist_unlimited}:${lot.pending_max_auto_relistings}`} lot={lot} /> : null}
           </article>;
         })}</div>
@@ -75,7 +76,7 @@ export default async function MyAuctionsPage({ searchParams }: { searchParams: P
             {!watchedLots.length ? <p className="p-5 text-sm text-auction-muted">You are not watching any available lots yet.</p> : null}
             {watchedLots.map((lot) => (
               <Link
-                href={`/lots/${lot.id}`}
+                href={`/lots/${lot.id}?view=manual`}
                 key={lot.id}
                 className="grid gap-4 p-4 transition hover:bg-white/[0.035] sm:grid-cols-[96px_minmax(0,1fr)_auto] sm:items-center sm:p-5"
               >

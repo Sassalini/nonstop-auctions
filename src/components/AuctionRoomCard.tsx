@@ -25,12 +25,13 @@ export function AuctionRoomCard({
   return (
     <Link
       href={`/rooms/${room.id}`}
-      className={`group relative min-h-[150px] overflow-hidden rounded-lg border p-4 transition ${
+      className={`group relative min-h-[150px] overflow-hidden rounded-lg border transition ${
         isActive
           ? "border-auction-gold/70 shadow-glow"
           : "border-white/10 hover:border-auction-gold/45"
       }`}
     >
+      <div className="relative overflow-hidden p-4">
       <Image
         src={room.imageUrl}
         alt=""
@@ -60,12 +61,7 @@ export function AuctionRoomCard({
                   className="h-full w-full object-cover"
                 />
               ) : null}
-              <span className="absolute left-1 top-1 scale-[0.72] origin-top-left">
-                <AuctionStatusBadge
-                  status={getLotBadgeVariant(status)}
-                  label={getLotCompactStatusLabel(status)}
-                />
-              </span>
+
             </div>
             <div className="min-w-0">
               <p className="text-sm text-auction-ivory">
@@ -78,10 +74,12 @@ export function AuctionRoomCard({
             </div>
           </div>
 
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-full border border-auction-gold/55 text-auction-gold transition group-hover:bg-auction-gold group-hover:text-black">
-            <ArrowRight size={18} strokeWidth={1.8} />
-          </span>
         </div>
+      </div>
+      </div>
+      <div data-testid="room-status-footer" className="relative flex min-h-10 flex-wrap items-center justify-between gap-2 border-t border-white/10 bg-auction-black px-3 py-2">
+        <AuctionStatusBadge status={getLotBadgeVariant(status)} label={getLotCompactStatusLabel(status)} />
+        <ArrowRight size={18} strokeWidth={1.8} className="shrink-0 text-auction-gold" aria-hidden="true" />
       </div>
     </Link>
   );

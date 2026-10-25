@@ -18,7 +18,7 @@ export function BidPanel({ lot }: BidPanelProps) {
       <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(10rem,0.8fr)_minmax(14rem,1.05fr)] lg:grid-cols-1 xl:grid-cols-[minmax(7.125rem,0.8fr)_minmax(8.875rem,1fr)_minmax(8.75rem,1fr)]">
         <div className="min-w-0">
           <p className="whitespace-nowrap text-xs uppercase tracking-[0.18em] text-auction-muted">
-            Auction price
+            Costs
           </p>
           <p className="mt-2 text-xl font-semibold text-auction-ivory">{lotPrice(lot)}</p>
         </div>

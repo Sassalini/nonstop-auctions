@@ -1,10 +1,18 @@
 "use client";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useAuctionViewing } from "@/components/AuctionViewingProvider";
 
 export function AutoPlayToggle() {
+  const router = useRouter(), pathname = usePathname(), params = useSearchParams();
   const { enabled, ready, setEnabled } = useAuctionViewing();
   return <button type="button" role="switch" aria-label="Auto-play" aria-checked={enabled} disabled={!ready}
-    onClick={() => setEnabled(!enabled)}
+    onClick={() => {
+      setEnabled(!enabled);
+      if (!enabled && params.get("view") === "manual") {
+        const next = new URLSearchParams(params.toString()); next.delete("view");
+        router.replace(pathname + (next.size ? `?${next}` : ""), { scroll: false });
+      }
+    }}
     className="flex min-h-11 shrink-0 items-center gap-2 rounded-sm text-xs text-auction-muted outline-none focus-visible:ring-2 focus-visible:ring-auction-gold focus-visible:ring-offset-2 focus-visible:ring-offset-auction-black disabled:opacity-50">
     <span>Auto-play <span className={enabled ? "text-auction-gold" : "text-auction-muted"}>{enabled ? "On" : "Off"}</span></span>
     <span aria-hidden="true" className={`relative h-6 w-11 rounded-full border transition-colors ${enabled ? "border-auction-gold/60 bg-auction-gold/60" : "border-white/20 bg-white/10"}`}>

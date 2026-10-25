@@ -25,7 +25,7 @@ test("phase labels match the live auction contract", () => {
   assert.equal(getLotStatusLabel("ACTIVE_BIDDING"), "Live");
   assert.equal(getLotCompactStatusLabel("ACTIVE_BIDDING"), "Live");
   assert.equal(getLotTimerLabel("ACTIVE_BIDDING"), "Time remaining");
-  assert.equal(getLotCompactStatusLabel("UNSOLD"), "Returned");
+  assert.equal(getLotCompactStatusLabel("UNSOLD"), "Up Next");
 });
 
 test("minimum bids distinguish the first bid from later increments", () => {

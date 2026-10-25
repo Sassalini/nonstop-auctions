@@ -150,8 +150,9 @@ export function AccountNotifications() {
         {!items.length && !error ? <p className="text-sm text-auction-muted">No notifications yet.</p> : null}
         <ul className="divide-y divide-white/10">
           {items.map((item) => <li key={item.id} className={`flex gap-2 py-3 ${item.read_at ? "opacity-70" : ""}`}>
-            <Link href={item.kind === "WON" ? `/won-auctions?lot=${item.lot_id}#${item.lot_id}` : item.kind === "SELLER_SOLD" ? `/my-auctions?lot=${item.lot_id}#${item.lot_id}` : `/lots/${item.lot_id}`} prefetch={false} onClick={() => { setOpen(false); if (!item.read_at) void markRead(item.id); }} className="min-w-0 flex-1 rounded-sm focus-visible:outline-auction-gold">
+            <Link href={item.kind === "WON" ? `/won-auctions?lot=${item.lot_id}#${item.lot_id}` : item.kind === "SELLER_SOLD" ? `/my-auctions?lot=${item.lot_id}#${item.lot_id}` : `/lots/${item.lot_id}?view=manual`} prefetch={false} onClick={() => { setOpen(false); if (!item.read_at) void markRead(item.id); }} className="min-w-0 flex-1 rounded-sm focus-visible:outline-auction-gold">
               <p className={`text-sm ${item.read_at ? "text-auction-ivory" : "text-auction-gold"}`}>{messages[item.kind]}</p>
+              <p className="mt-1 text-xs text-auction-muted">Lot {item.lot_reference}</p>
               <p className="mt-1 break-words text-xs text-auction-muted">{item.lot_title}</p>
               <time className="mt-1 block text-[11px] text-auction-muted" dateTime={item.created_at}>{new Date(item.created_at).toLocaleString("en-GB")}</time>
             </Link>

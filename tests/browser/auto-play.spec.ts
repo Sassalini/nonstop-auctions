@@ -41,7 +41,7 @@ for (const width of [375,1440]) {
     hub.emit('lots', { id: first, room_id: roomId, status: 'SOLD' });
     await expect(page.getByText("Auto-play is off. You are viewing this lot's final result.")).toBeVisible();
     await expect(heading(page, 'Sequence current lot')).toBeVisible();
-    await expect(page.getByText('Auction price', { exact: true })).toBeVisible();
+    await expect(page.getByText('Costs', { exact: true })).toBeVisible();
     await expect(page.getByText('Sold for: £250', { exact: true }).first()).toBeVisible();
     await expect(page).toHaveURL(new RegExp(`/lots/${first}$`));
     await page.screenshot({ path: `test-results/auto-play-off-${width}.png`, fullPage: width < 1000 });
@@ -53,7 +53,7 @@ for (const width of [375,1440]) {
     await expect(toggle(page)).toHaveAttribute('aria-checked', 'false');
     await page.getByRole('link').filter({ has: page.getByRole('heading', { level: 3, name: 'Third sequence lot', exact: true }) }).click();
     await expect(heading(page, 'Third sequence lot')).toBeVisible();
-    await expect(page).toHaveURL(new RegExp(`/lots/${third}$`));
+    await expect(page).toHaveURL(new RegExp(`/lots/${third}\\?view=manual$`));
     await expect(toggle(page)).toHaveAttribute('aria-checked', 'false');
     await toggle(page).focus(); await page.keyboard.press('Space');
     await expect(toggle(page)).toHaveAttribute('aria-checked', 'true');
@@ -82,7 +82,7 @@ test('no-bid completion stays UNSOLD with starting bid and immediate queue retur
   hub.emit('lots', { id: first, room_id: roomId, status: 'UNSOLD' });
   await expect(heading(page, 'Sequence current lot')).toBeVisible();
   await expect(page.getByText('Starting bid: £100', { exact: true }).first()).toBeVisible();
-  await expect(page.getByText('No bids — returned to queue', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('Up Next', { exact: true }).first()).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`/lots/${first}$`));
   const response = await request.get(`http://127.0.0.1:54399/rest/v1/lots?id=eq.${first}`);
   const [lot] = await response.json();

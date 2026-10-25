@@ -1,3 +1,4 @@
+import { orderSidebarRooms } from "@/lib/room-order";
 import { AuctionRoomCard } from "@/components/AuctionRoomCard";
 import type { AuctionRoom } from "@/lib/auction-data";
 
@@ -23,7 +24,7 @@ export function AuctionRoomSidebar({
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
-        {rooms.map((room) => (
+        {orderSidebarRooms(rooms).map((room) => (
           <AuctionRoomCard
             key={room.id}
             room={room}

@@ -39,5 +39,5 @@ test('exhausted listing can return to the queue and then stop without removing h
  await request.post(fixture,{data:{mode:'empty'}});await request.post(fixture,{data:{mode:'management'}});await login(page);
  const article=page.locator('article').filter({has:page.getByRole('heading',{name:'Exhausted managed listing',exact:true})});
  await article.getByRole('button',{name:'Manage relistings',exact:true}).click();await article.getByLabel('Number of automatic relistings',{exact:true}).fill('5');await article.getByRole('button',{name:'Save relisting settings',exact:true}).click();await expect(article.getByText('1 automatic relistings scheduled',{exact:false})).toBeVisible();
- await article.getByRole('button',{name:'Stop future relistings',exact:true}).click();await expect(article.getByText('Relistings finished',{exact:false})).toBeVisible();await expect(article.getByRole('heading',{name:'Exhausted managed listing',exact:true})).toBeVisible();
+ await article.getByRole('button',{name:'Stop future relistings',exact:true}).click();await expect(article.getByText(/^Relistings finished ·/)).toBeVisible();await expect(article.getByRole('heading',{name:'Exhausted managed listing',exact:true})).toBeVisible();
 });

@@ -1,5 +1,6 @@
 "use client";
 
+import { descriptionParagraphs } from "@/lib/lot-description";
 import { useState } from "react";
 import type { Lot } from "@/lib/auction-data";
 
@@ -7,15 +8,14 @@ type LotTabsProps = {
   lot: Lot;
 };
 
-const tabLabels = ["Description", "Condition Report", "Shipping & Info"] as const;
+const tabLabels = ["Description", "Shipping & Info"] as const;
 
 export function LotTabs({ lot }: LotTabsProps) {
   const [activeTab, setActiveTab] = useState<(typeof tabLabels)[number]>("Description");
 
   const content = {
-    Description: lot.description,
-    "Condition Report": lot.conditionReport,
-    "Shipping & Info": lot.shippingInfo,
+    Description: descriptionParagraphs(lot.description, lot.conditionReport),
+    "Shipping & Info": [lot.shippingInfo],
   }[activeTab];
 
   return (
@@ -40,7 +40,7 @@ export function LotTabs({ lot }: LotTabsProps) {
         })}
       </div>
       <div className="space-y-3 p-4 text-sm leading-7 text-auction-muted sm:p-5">
-        <p>{content}</p>
+        {content.map((text, index) => <p key={index} className="whitespace-pre-line">{text}</p>)}
         <button
           type="button"
           className="text-sm font-medium text-auction-gold transition hover:text-auction-goldSoft"

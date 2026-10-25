@@ -67,7 +67,7 @@ export function AppHeader() {
           ))}
         </nav>
 
-        <form className="mx-auto hidden min-w-0 w-full max-w-2xl items-center md:flex">
+        <form action="/search" className="mx-auto hidden min-w-0 w-full max-w-2xl items-center md:flex">
           <label htmlFor="auction-search" className="sr-only">
             Search lots
           </label>
@@ -76,8 +76,8 @@ export function AppHeader() {
             <input
               id="auction-search"
               type="search"
-              placeholder="Catalogue search coming soon"
-              disabled
+              name="q"
+              placeholder="Search lot reference"
               className="h-full min-w-0 flex-1 bg-transparent text-sm text-auction-ivory outline-none placeholder:text-auction-muted"
             />
           </div>

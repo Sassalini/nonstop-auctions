@@ -1,5 +1,4 @@
-import Link from "next/link";
-import { ListFilter } from "lucide-react";
+import { FullCatalogue } from "@/components/FullCatalogue";
 import { UpcomingLotCard } from "@/components/UpcomingLotCard";
 import { AutoPlayToggle } from "@/components/AutoPlayToggle";
 import type { AuctionRoom, Lot } from "@/lib/auction-data";
@@ -40,13 +39,7 @@ export function UpcomingLotsSidebar({
         )}
       </div>
 
-      {room ? <Link
-        href={`/rooms/${room.id}`}
-        className="mt-4 flex h-11 items-center justify-center gap-2 rounded-md border border-auction-gold/60 text-sm font-semibold text-auction-gold transition hover:bg-auction-gold hover:text-black"
-      >
-        <ListFilter size={18} strokeWidth={1.8} />
-        View Full Catalogue
-      </Link> : null}
+      {room ? <FullCatalogue key={room.id} roomSlug={room.slug} roomName={room.name} revision={lots} /> : null}
     </aside>
   );
 }

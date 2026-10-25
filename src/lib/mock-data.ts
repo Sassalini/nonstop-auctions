@@ -269,7 +269,7 @@ function buildMockLot(
     bidCount: 0,
     countdownSeconds,
     minimumIncrement,
-    startsIn: auctionStatus === "PREVIEW" ? `00:${String(previewSeconds).padStart(2, "0")}` : auctionStatus === "UNSOLD" ? "Returned to queue" : "Queued",
+    startsIn: auctionStatus === "PREVIEW" ? `00:${String(previewSeconds).padStart(2, "0")}` : auctionStatus === "UNSOLD" ? "Queued" : "Queued",
     auctionStatus,
     nextEligibleAt: auctionStatus === "UNSOLD" ? returnedToQueueAt : null,
   };

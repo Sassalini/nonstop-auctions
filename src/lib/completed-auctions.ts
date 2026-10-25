@@ -12,7 +12,7 @@ export function parseHistoryLot(value?: string) {
 }
 export async function getCompletedAuctions(mode: "buyer" | "seller", page = 1, lotId?: string) {
   const client = await createSupabaseServerClient();
-  const { data, error } = await client.rpc("completed_auctions_page", {
+  const { data, error } = await client.rpc("completed_auctions_page_with_reference", {
     p_mode: mode, p_limit: historyPageSize + 1, p_offset: lotId ? 0 : (page - 1) * historyPageSize,
     ...(lotId ? { p_lot_id: lotId } : {}),
   });

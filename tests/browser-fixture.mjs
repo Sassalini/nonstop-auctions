@@ -19,6 +19,7 @@ function requestAccount(req) {
 }
 const id = '20000000-0000-0000-0000-000000000701';
 let lots = [];
+let fixtureReferenceCounter = 20000;
 let images = [];
 let photoObjects = new Map();
 let failUpload = false;
@@ -27,7 +28,7 @@ let loseSubmitResponse = false;
 const createLot = (status = 'PREVIEW') => ({
   relist_unlimited:false,max_auto_relistings:5,auto_relistings_used:0,completed_attempts:0,
   final_unsold_at:null,removal_requested_at:null,removed_at:null,pending_relist_unlimited:null,pending_max_auto_relistings:null,
-  id, room_id: room.id, seller_id: '00000000-0000-0000-0000-000000000101',
+  lot_reference: 1001, id, room_id: room.id, seller_id: '00000000-0000-0000-0000-000000000101',
   title: 'Release test catalogue item', description: 'Catalogue description', condition_report: 'Condition report', shipping_info: 'Collection information',
   starting_bid: 100, current_bid: 100, minimum_increment: 10, bid_count: status === 'ACTIVE_BIDDING' ? 1 : 0,
   status, preview_duration_seconds: 30, first_bid_duration_seconds: 30, bid_extension_seconds: 5, requeue_delay_days: 7,
@@ -87,7 +88,7 @@ const server = createServer(async (req, res) => {
       ];
       images = lots.map(lot => ({ id: lot.id, lot_id: lot.id, image_url: '/images/auction-house-background.png', sort_order: 0 }));
       accountsEnabled = true;
-      notifications = [accountA, accountB].map((account,index) => ({ id: `40000000-0000-0000-0000-00000000010${index+1}`, user_id: account, lot_id: id, kind: index ? 'WATCHED_SOLD' : 'WON', lot_title: index ? 'Private account two item' : 'Private account one item', auction_run: new Date().toISOString(), created_at: new Date().toISOString(), read_at: null }));
+      notifications = [accountA, accountB].map((account,index) => ({ id: `40000000-0000-0000-0000-00000000010${index+1}`, user_id: account, lot_id: id, kind: index ? 'WATCHED_SOLD' : 'WON', lot_reference: 1001, lot_title: index ? 'Private account two item' : 'Private account one item', auction_run: new Date().toISOString(), created_at: new Date().toISOString(), read_at: null }));
       watchlist = [accountA, accountB].map((account,index) => ({ id: `50000000-0000-0000-0000-00000000010${index+1}`, user_id: account, lot_id: id }));
     }
     if (state.mode === 'performance') {
@@ -103,6 +104,23 @@ const server = createServer(async (req, res) => {
         photoObjects.set(path,{type:'image/png',buffer:Buffer.from('fixture')});
         return { id:`${lot.id}-${i}`, lot_id:lot.id,storage_path:path,image_url:`storage:lot-photos/${path}`,sort_order:i,created_at:new Date().toISOString() };
       }));
+    }
+    if (state.mode === 'gallery') {
+      rooms=[jewellery,room];accountsEnabled=false;
+      lots=[{...createLot('PREVIEW'),ends_at:new Date(Date.now()+3600000).toISOString(),title:'Gallery fixture lot',description:'Carefully described condition.',condition_report:'Additional condition information.'},
+       {...createLot('WAITING'),id:'20000000-0000-0000-0000-000000000702',title:'Selected queued lot',queue_position:2}];
+      images=[{id:'one',lot_id:id,image_url:'/images/auction-house-background.png?gallery=1',sort_order:0},
+        {id:'two',lot_id:id,image_url:'/images/auction-house-background.png?gallery=2',sort_order:1},
+        {id:'three',lot_id:id,image_url:'/images/auction-house-background.png?gallery=3',sort_order:2}];
+    }
+    if (state.mode === 'catalogue') {
+      rooms=[room,jewellery];accountsEnabled=false;
+      lots=[{...createLot('PREVIEW'),ends_at:new Date(Date.now()+3600000).toISOString()},...Array.from({length:51},(_,i)=>({...createLot(i===1?'UNSOLD':'WAITING'),id:`30000000-0000-0000-0000-${String(i+1).padStart(12,'0')}`,title:`Catalogue item ${i+1}`,queue_position:i+2})),
+       {...createLot('SOLD'),id:'90000000-0000-0000-0000-000000000001',title:'Excluded sold item'},
+       {...createLot('CANCELLED'),id:'90000000-0000-0000-0000-000000000002',title:'Excluded removed item'},
+       {...createLot('EXPIRED'),id:'90000000-0000-0000-0000-000000000003',title:'Excluded exhausted item'},
+       {...createLot('WAITING'),room_id:jewellery.id,id:'90000000-0000-0000-0000-000000000004',title:'Excluded other room'}];
+      images=lots.map(lot=>({id:lot.id,lot_id:lot.id,image_url:'/images/auction-house-background.png',sort_order:0}));
     }
     if (state.mode === 'management') {
       accountsEnabled=true;rooms=[room];
@@ -139,11 +157,12 @@ const server = createServer(async (req, res) => {
     }
     if (state.hallEmpty) lots = lots.filter(lot => lot.room_id !== room.id);
     if (state.retireHall) { const hallLot = lots.find(lot => lot.id === id); if (hallLot) hallLot.status = 'SOLD'; }
-    if (state.notification) notifications.push({ ...state.notification, auction_run: new Date().toISOString(), created_at: new Date().toISOString(), read_at: null });
+    if (state.notification) notifications.push({ lot_reference: 1001, ...state.notification, auction_run: new Date().toISOString(), created_at: new Date().toISOString(), read_at: null });
+    lots.forEach((lot,index)=>{ if(lot.lot_reference === undefined || (lot.lot_reference === 1001 && lot.id !== id)) lot.lot_reference=1002+index; });
     return reply({ ok: true });
   }
   if (url.pathname === '/_test/seller-state') return reply({ lots:lots.length, images:images.length, objects:photoObjects.size });
-  if (url.pathname.endsWith('/rpc/completed_auctions_page')) {
+  if (url.pathname.endsWith('/rpc/completed_auctions_page') || url.pathname.endsWith('/rpc/completed_auctions_page_with_reference')) {
     const account = requestAccount(req), data = await body();
     if (!account) return reply({message:'Authentication required'},401);
     if (!['buyer','seller'].includes(data.p_mode)) return reply({message:'Invalid history mode'},400);
@@ -152,7 +171,7 @@ const server = createServer(async (req, res) => {
       .slice(data.p_offset ?? 0, (data.p_offset ?? 0) + (data.p_limit ?? 51));
     return reply(rows.map(lot => {
       const photo = images.filter(image=>image.lot_id===lot.id).sort((a,b)=>a.sort_order-b.sort_order)[0];
-      return {lot_id:lot.id,title:lot.title,sale_price:lot.winning_bid,completed_at:lot.sold_at,seller_name:'History Seller',buyer_name:'History Buyer',is_buyer:lot.highest_bidder_id===account,image_url:photo?.image_url??null,storage_path:photo?.storage_path??null};
+      return {lot_reference:lot.lot_reference,lot_id:lot.id,title:lot.title,sale_price:lot.winning_bid,completed_at:lot.sold_at,seller_name:'History Seller',buyer_name:'History Buyer',is_buyer:lot.highest_bidder_id===account,image_url:photo?.image_url??null,storage_path:photo?.storage_path??null};
     }));
   }
   if (url.pathname.endsWith('/rpc/my_completed_auctions')) {
@@ -176,7 +195,7 @@ const server = createServer(async (req, res) => {
     if (url.pathname.endsWith('/save_seller_draft') || url.pathname.endsWith('/save_seller_draft_with_relisting')) {
       const existing = lots.find(lot => lot.seller_id === account && lot.submission_key === data.p_submission_key);
       if (existing) { if(existing.status==='DRAFT'){existing.relist_unlimited=data.p_relist_unlimited??existing.relist_unlimited;existing.max_auto_relistings=data.p_max_auto_relistings??existing.max_auto_relistings;} return reply(existing); }
-      const created = { ...createLot('DRAFT'), id: randomUUID(), seller_id: account, submission_key: data.p_submission_key, room_id: data.p_room_id, title: data.p_title, description: data.p_description, starting_bid: data.p_starting_bid, relist_unlimited:data.p_relist_unlimited??false,max_auto_relistings:data.p_max_auto_relistings??5,current_bid: 0, ends_at: null, queue_position: 0 };
+      const created = { ...createLot('DRAFT'), lot_reference: fixtureReferenceCounter++, id: randomUUID(), seller_id: account, submission_key: data.p_submission_key, room_id: data.p_room_id, title: data.p_title, description: data.p_description, starting_bid: data.p_starting_bid, relist_unlimited:data.p_relist_unlimited??false,max_auto_relistings:data.p_max_auto_relistings??5,current_bid: 0, ends_at: null, queue_position: 0 };
       lots.push(created); return reply(created);
     }
     const lot = lots.find(lot => lot.id === data.p_lot_id && lot.seller_id === account);

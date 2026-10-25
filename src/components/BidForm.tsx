@@ -162,7 +162,7 @@ export function BidForm({
           : auctionStatus === "SOLD"
             ? "Sold"
             : auctionStatus === "EXPIRED" ? "Unsold" : auctionStatus === "CANCELLED" ? "Removed" : auctionStatus === "UNSOLD"
-              ? "Returned"
+              ? "Queued"
               : biddingIsOpen
                 ? "Place Bid"
                 : "Bidding Not Open"}

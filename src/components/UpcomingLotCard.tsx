@@ -14,10 +14,11 @@ import {
 import type { Lot } from "@/lib/auction-data";
 
 type UpcomingLotCardProps = {
+  onSelect?: () => void;
   lot: Lot;
 };
 
-export function UpcomingLotCard({ lot }: UpcomingLotCardProps) {
+export function UpcomingLotCard({ lot, onSelect }: UpcomingLotCardProps) {
   const statusLabel = getLotStatusLabel(lot.auctionStatus);
   const timerLabel = getLotTimerLabel(lot.auctionStatus);
   const showTimer = isTimedLifecycleStatus(lot.auctionStatus);
@@ -25,7 +26,8 @@ export function UpcomingLotCard({ lot }: UpcomingLotCardProps) {
 
   return (
     <Link
-      href={`/lots/${lot.id}`}
+      href={`/lots/${lot.id}?view=manual`}
+      onClick={onSelect} prefetch={false}
       className="grid grid-cols-[108px_minmax(0,1fr)] gap-3 rounded-lg border border-white/10 bg-black/[0.7] p-2 transition hover:border-auction-gold/55 hover:bg-black/[0.75]"
     >
       <div className="relative aspect-[4/3] overflow-hidden rounded-md border border-white/10 bg-black">
@@ -38,7 +40,7 @@ export function UpcomingLotCard({ lot }: UpcomingLotCardProps) {
         />
       </div>
       <div className="min-w-0 py-1">
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-sm font-semibold text-auction-ivory">Lot {lot.lotNumber}</p>
           <AuctionStatusBadge
             status={getLotBadgeVariant(lot.auctionStatus)}

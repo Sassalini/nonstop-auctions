@@ -14,7 +14,7 @@ export async function CompletedAuctions({ mode, history: prepared }: { mode: "bu
   {!records.length ? <p className="mt-4 text-sm text-auction-muted">No completed auctions yet.</p> : null}
   <div className="divide-y divide-white/10">{records.map(record => <article id={record.lot_id} key={record.lot_id} className="flex flex-wrap gap-4 py-5">
     <Image src={record.image_url || "/images/auction-house-background.png"} alt={record.title} width={112} height={84} className="h-20 w-28 rounded-md object-cover" />
-    <div className="min-w-0 flex-1"><Link href={`/lots/${record.lot_id}`} className="break-words font-semibold text-auction-gold">{record.title}</Link>
+    <div className="min-w-0 flex-1"><p className="mb-1 text-xs text-auction-muted">Lot {record.lot_reference}</p><Link href={`/lots/${record.lot_id}?view=manual`} className="break-words font-semibold text-auction-gold">{record.title}</Link>
      {mode === "buyer" ? <p className="mt-1 text-sm text-auction-ivory">You won this auction.</p> : null}
      <p className="mt-1 text-sm text-auction-ivory">Sold for: {formatCurrency(Number(record.sale_price))}</p>
      <p className="mt-1 text-sm text-auction-muted">{mode === "buyer" ? `Seller: ${record.seller_name}` : `Winning bidder: ${record.buyer_name}`}</p>
