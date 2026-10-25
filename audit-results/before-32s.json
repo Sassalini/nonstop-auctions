@@ -1,0 +1,135 @@
+{
+  "initial": {
+    "requests": 50,
+    "bytes": 14508,
+    "byPath": {
+      "/auth/v1/user": {
+        "requests": 8,
+        "bytes": 1552
+      },
+      "/rest/v1/auction_rooms": {
+        "requests": 9,
+        "bytes": 3159
+      },
+      "/rest/v1/lots": {
+        "requests": 11,
+        "bytes": 3684
+      },
+      "/rest/v1/watchlist": {
+        "requests": 3,
+        "bytes": 149
+      },
+      "/rest/v1/bids": {
+        "requests": 2,
+        "bytes": 4
+      },
+      "/rest/v1/rpc/completed_auctions_page_with_reference": {
+        "requests": 2,
+        "bytes": 4
+      },
+      "/rest/v1/lot_images": {
+        "requests": 6,
+        "bytes": 2484
+      },
+      "/rest/v1/rpc/advance_room_lifecycle": {
+        "requests": 3,
+        "bytes": 2811
+      },
+      "/rest/v1/rpc/lot_watchlist_count": {
+        "requests": 1,
+        "bytes": 1
+      },
+      "/rest/v1/rpc/auction_server_time": {
+        "requests": 1,
+        "bytes": 26
+      },
+      "/rest/v1/notifications": {
+        "requests": 4,
+        "bytes": 634
+      }
+    }
+  },
+  "idle32s": {
+    "requests": 27,
+    "bytes": 10366,
+    "byPath": {
+      "/rest/v1/rpc/advance_room_lifecycle": {
+        "requests": 4,
+        "bytes": 3748
+      },
+      "/rest/v1/rpc/lot_watchlist_count": {
+        "requests": 2,
+        "bytes": 2
+      },
+      "/auth/v1/user": {
+        "requests": 2,
+        "bytes": 388
+      },
+      "/rest/v1/auction_rooms": {
+        "requests": 4,
+        "bytes": 1476
+      },
+      "/rest/v1/notifications": {
+        "requests": 4,
+        "bytes": 634
+      },
+      "/rest/v1/lots": {
+        "requests": 6,
+        "bytes": 2436
+      },
+      "/rest/v1/lot_images": {
+        "requests": 4,
+        "bytes": 1656
+      },
+      "/rest/v1/rpc/auction_server_time": {
+        "requests": 1,
+        "bytes": 26
+      }
+    }
+  },
+  "fiveEvents": {
+    "requests": 45,
+    "bytes": 19575,
+    "byPath": {
+      "/auth/v1/user": {
+        "requests": 5,
+        "bytes": 970
+      },
+      "/rest/v1/lots": {
+        "requests": 15,
+        "bytes": 6090
+      },
+      "/rest/v1/auction_rooms": {
+        "requests": 10,
+        "bytes": 3690
+      },
+      "/rest/v1/rpc/advance_room_lifecycle": {
+        "requests": 5,
+        "bytes": 4685
+      },
+      "/rest/v1/lot_images": {
+        "requests": 10,
+        "bytes": 4140
+      }
+    }
+  },
+  "channels": {
+    "joins": 5,
+    "leaves": 0,
+    "tracks": 2,
+    "receivedBytes": 2569,
+    "sentBytes": 1962,
+    "sockets": 1,
+    "channels": 3
+  },
+  "afterNavigation": {
+    "joins": 7,
+    "leaves": 0,
+    "tracks": 3,
+    "receivedBytes": 3564,
+    "sentBytes": 6542,
+    "sockets": 1,
+    "channels": 2
+  },
+  "notes": "Fixture uncompressed JSON bodies, not production wire bytes. Gallery uses local fixture photographs; no production image-size claim."
+}

@@ -2,4 +2,7 @@ export const lotColumns = "lot_reference,relist_unlimited,max_auto_relistings,au
 
 export const auctionLotColumns = "lot_reference,id,room_id,title,description,condition_report,shipping_info,starting_bid,current_bid,bid_count,minimum_increment,preview_duration_seconds,status,starts_at,preview_starts_at,bidding_starts_at,ends_at,next_eligible_at,queue_position,winning_bid,is_premium,created_at" as const;
 export const roomColumns = "id,name,slug,description,image_url,display_order,is_active,created_at" as const;
-export const imageColumns = "id,lot_id,storage_path,image_url,alt_text,sort_order,created_at" as const;
+export const imageColumns = "thumbnail_path,display_path,id,lot_id,storage_path,image_url,alt_text,sort_order,created_at" as const;
+
+// Cards never render seller descriptions or shipping/condition paragraphs.
+export const auctionCardColumns = "lot_reference,id,room_id,title,starting_bid,current_bid,bid_count,minimum_increment,preview_duration_seconds,status,starts_at,preview_starts_at,bidding_starts_at,ends_at,next_eligible_at,queue_position,winning_bid,is_premium,created_at" as const;

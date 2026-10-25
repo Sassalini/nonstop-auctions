@@ -16,9 +16,9 @@ export function SellerDraftActions({ lotId, submissionKey }: { lotId: string; su
     working.current = true; setBusy(true); setMessage("");
     try {
       const client = createSupabaseBrowserClient();
-      const images = await client.from("lot_images").select("storage_path").eq("lot_id", lotId);
+      const images = await client.from("lot_images").select("storage_path,thumbnail_path,display_path").eq("lot_id", lotId);
       if (images.error) throw images.error;
-      const paths = (images.data ?? []).flatMap(image => image.storage_path ? [image.storage_path] : []);
+      const paths = (images.data ?? []).flatMap(image => [image.storage_path, image.thumbnail_path, image.display_path].filter((path): path is string => Boolean(path)));
       if (paths.length) { const removed = await client.storage.from(PHOTO_BUCKET).remove(paths); if (removed.error) throw removed.error; }
       const removed = await client.rpc("discard_seller_draft", { p_lot_id: lotId });
       if (removed.error) throw removed.error;

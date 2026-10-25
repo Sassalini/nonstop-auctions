@@ -1,0 +1,6 @@
+{
+  "requests": 1,
+  "bytes": 2891942,
+  "sourceBytes": 2891942,
+  "scenario": "One already-mounted original; rotate signed token and trigger one Realtime RSC refresh. Local fixture PNG, not a production photo."
+}

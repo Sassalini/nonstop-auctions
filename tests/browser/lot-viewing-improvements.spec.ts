@@ -19,6 +19,7 @@ for(const width of [375,768,1440])test(`gallery, room badges and description are
  await expect(page.getByRole('button',{name:'Condition Report',exact:true})).toHaveCount(0);await expect(page.getByText('Additional condition information.',{exact:true})).toBeVisible();await expect(page.getByText('Costs',{exact:true})).toBeVisible();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:`test-results/lot-polish-${width}.png`,fullPage:width<1000});
  await page.getByRole('link').filter({has:page.getByRole('heading',{name:'Selected queued lot',exact:true})}).click();await expect(page.getByRole('heading',{name:'Selected queued lot',exact:true,level:1})).toBeVisible();await expect(page.getByRole('button',{name:'Next photograph',exact:true})).toHaveCount(0);await expect(page.getByTestId('main-lot-image')).not.toHaveAttribute('src',/gallery=3/);
+ await page.goto(`/lots/${first}?view=manual`);await expect(page.getByRole('button',{name:'Show photograph 3',exact:true})).toBeVisible();
 });
 test('manual selection survives Realtime and reload without changing Auto-play; returning resumes live',async({page,request,context})=>{
  await request.post(state,{data:{mode:'empty'}});await request.post(state,{data:{mode:'sequence'}});const hub=new RealtimeFixture();await hub.attach(context);await page.goto('/rooms/general-room');

@@ -1,7 +1,7 @@
 import { cache } from "react";
-import { auctionLotColumns as lotColumns, roomColumns, imageColumns } from "@/lib/lot-columns";
+import { auctionLotColumns as lotColumns, auctionCardColumns, roomColumns, imageColumns } from "@/lib/lot-columns";
 import { unstable_noStore as noStore } from "next/cache";
-import { resolveLotPhotos } from "@/lib/lot-photos";
+import { resolveLotPhotos, photoDeliveryUrl } from "@/lib/lot-photos";
 import { getAuctionDataMode } from "@/lib/auction-mode";
 import type { LiveLotCandidate } from "@/lib/live-viewers";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -26,6 +26,8 @@ import type {
 
 export type Lot = MockLot & {
   auctionStatus: LotStatus;
+  galleryThumbnailUrls?: string[];
+  galleryOriginalUrls?: string[];
   endsAt?: string | null;
   nextEligibleAt?: string | null;
   winningBid?: number | null;
@@ -40,6 +42,10 @@ export type AuctionRoom = MockAuctionRoom & {
 type SupabaseReadClient = SupabaseClient<Database>;
 
 type AuctionLotRow = Pick<LotRow, "lot_reference" | "id" | "room_id" | "title" | "description" | "condition_report" | "shipping_info" | "starting_bid" | "current_bid" | "bid_count" | "minimum_increment" | "preview_duration_seconds" | "status" | "starts_at" | "preview_starts_at" | "bidding_starts_at" | "ends_at" | "next_eligible_at" | "queue_position" | "winning_bid" | "is_premium" | "created_at">;
+
+function cardLot<T>(row: T) {
+  return { ...row, description: "", condition_report: "", shipping_info: "" };
+}
 
 type SupabaseLotBundle = {
   lot: AuctionLotRow;
@@ -162,7 +168,7 @@ function mapSupabaseLot(bundle: SupabaseLotBundle): Lot {
   const { lot, room, images, bids } = bundle;
   const availableImages = images.filter(image => image.image_url);
   const galleryImageUrls = availableImages.length
-    ? availableImages.map((image) => image.image_url)
+    ? availableImages.map((image) => image.storage_path ? photoDeliveryUrl(image, "display") : image.image_url)
     : [room?.image_url ?? fallbackImageUrl];
   const startingBid = toNumber(lot.starting_bid);
   const rawCurrentBid = toNumber(lot.current_bid);
@@ -181,7 +187,9 @@ function mapSupabaseLot(bundle: SupabaseLotBundle): Lot {
     conditionReport: lot.condition_report ?? "Condition report pending.",
     shippingInfo: lot.shipping_info ?? "Shipping details will be confirmed before checkout.",
     imageUrl: galleryImageUrls[0],
-    thumbnailUrl: galleryImageUrls[0],
+    thumbnailUrl: availableImages[0]?.storage_path ? photoDeliveryUrl(availableImages[0], "thumb") : galleryImageUrls[0],
+    galleryThumbnailUrls: availableImages.length ? availableImages.map(image => image.storage_path ? photoDeliveryUrl(image, "thumb") : image.image_url) : galleryImageUrls,
+    galleryOriginalUrls: availableImages.length ? availableImages.map(image => image.storage_path ? photoDeliveryUrl(image, "original") : image.image_url) : galleryImageUrls,
     galleryImageUrls,
     estimateLow: startingBid,
     estimateHigh: startingBid,
@@ -230,7 +238,7 @@ function getMockRoomBySlug(roomSlug: string) {
   return getMockAuctionRooms().find((room) => room.slug === roomSlug || room.id === roomSlug);
 }
 
-async function fetchLotImages(client: SupabaseReadClient, lotIds: string[], thumbnailOnly = false) {
+async function fetchLotImages(client: SupabaseReadClient, lotIds: string[], thumbnailOnly = false, galleryLotId?: string) {
   if (!lotIds.length) {
     return new Map<string, LotImageRow[]>();
   }
@@ -250,6 +258,7 @@ async function fetchLotImages(client: SupabaseReadClient, lotIds: string[], thum
 
   const seen = new Set<string>();
   const selected = thumbnailOnly ? data.filter(image => {
+    if (image.lot_id === galleryLotId) return true;
     if (seen.has(image.lot_id)) return false;
     seen.add(image.lot_id); return true;
   }) : data;
@@ -303,7 +312,7 @@ async function fetchSupabaseRoomAuctionState(
   const excludedId = excludeLotId ?? currentLotRow?.id;
   let upcomingQuery = client
     .from("lots")
-    .select(lotColumns)
+    .select(auctionCardColumns)
     .eq("room_id", room.id)
     .in("status", upcomingLotStatuses)
     .order("queue_position", { ascending: true })
@@ -314,7 +323,8 @@ async function fetchSupabaseRoomAuctionState(
     upcomingQuery = upcomingQuery.neq("id", excludedId);
   }
 
-  const { data: upcomingRows, error: upcomingError } = await upcomingQuery;
+  const { data: upcomingCards, error: upcomingError } = await upcomingQuery;
+  const upcomingRows = upcomingCards?.map(cardLot);
 
   if (upcomingError || !upcomingRows) {
     if (upcomingError) {
@@ -326,12 +336,12 @@ async function fetchSupabaseRoomAuctionState(
   const sourceRows = Array.from(
     new Map(
       [currentLotRow, ...upcomingRows]
-        .filter((lot): lot is AuctionLotRow => Boolean(lot))
+        .filter((lot): lot is NonNullable<typeof lot> => Boolean(lot))
         .map((lot) => [lot.id, lot]),
     ).values(),
   );
   const lotIds = sourceRows.map((lot) => lot.id);
-  const imagesByLotId = await fetchLotImages(client, lotIds);
+  const imagesByLotId = await fetchLotImages(client, excludeLotId ? lotIds.filter(id => id !== currentLotRow?.id) : lotIds, true, !excludeLotId ? currentLotRow?.id : undefined);
   const bidsByLotId = new Map<string, BidRow[]>();
   const mappedLots = sourceRows.map((lot) =>
     mapSupabaseLot(
@@ -389,11 +399,11 @@ export const getAuctionRooms = cache(async (): Promise<AuctionRoom[]> => {
   if (!client) return getMockAuctionRooms();
   const [rooms, current] = await Promise.all([
     getActiveRoomRows(),
-    client.from("lots").select(lotColumns).in("status", currentLotStatuses),
+    client.from("lots").select(auctionCardColumns).in("status", currentLotStatuses),
   ]);
   if (current.error) throwAuctionDataError("Could not load current room lots", current.error);
-  const images = await fetchLotImages(client, (current.data ?? []).map(lot => lot.id));
-  const byRoom = new Map((current.data ?? []).map(lot => [lot.room_id, lot]));
+  const images = await fetchLotImages(client, (current.data ?? []).map(lot => lot.id), true);
+  const byRoom = new Map((current.data ?? []).map(lot => [lot.room_id, cardLot(lot)]));
   return rooms.map(room => {
     const lot = byRoom.get(room.id);
     return mapSupabaseRoom(room, lot ? mapSupabaseLot({ lot, room, images: images.get(lot.id) ?? [], bids: [] }) : undefined);
@@ -429,7 +439,7 @@ export async function getUpcomingLotsByRoomSlug(roomSlug: string) {
   return state?.upcomingLots ?? [];
 }
 
-export async function getLotById(lotId: string) {
+export async function getLotById(lotId: string): Promise<Lot | null> {
   noStore();
   if (isDemoMode()) return getMockLotById(lotId) ?? null;
   const client = await createSupabaseServerClient();
@@ -473,13 +483,13 @@ export async function getLotsByIds(ids: string[]): Promise<Lot[]> {
   if (!client) return mockLots.filter(lot => ids.includes(lot.id));
   const [rooms, result] = await Promise.all([
     getActiveRoomRows(),
-    client.from("lots").select(lotColumns).in("id", ids).in("status", visibleLotStatuses)
+    client.from("lots").select(auctionCardColumns).in("id", ids).in("status", visibleLotStatuses)
       .order("queue_position").order("created_at").order("id"),
   ]);
   if (result.error) throwAuctionDataError("Could not load watched lots", result.error);
   const byRoom = new Map(rooms.map(room => [room.id, room]));
-  const rows = (result.data ?? []).filter(lot => byRoom.has(lot.room_id));
-  const images = await fetchLotImages(client, rows.map(lot => lot.id));
+  const rows = (result.data ?? []).filter(lot => byRoom.has(lot.room_id)).map(cardLot);
+  const images = await fetchLotImages(client, rows.map(lot => lot.id), true);
   return rows.map((lot) => mapSupabaseLot({ lot, room: byRoom.get(lot.room_id), images: images.get(lot.id) ?? [], bids: [] }));
 }
 
@@ -553,7 +563,12 @@ export async function getLotAuctionData(lotId: string) {
   // The RPC may have completed the displayed lot while advancing the room.
   // Re-read only in that case; otherwise use the RPC's fresh row or the stable
   // historical record instead of fetching/signing the same gallery twice.
-  const displayedLot = state?.currentLot?.id === lotId ? state.currentLot
+  const displayedLot = state?.currentLot?.id === lotId ? {
+    ...state.currentLot,
+    // The detail read already resolved the full gallery; reuse it alongside
+    // the lifecycle RPC's fresh prices/status rather than signing it twice.
+    imageUrl: currentLot.imageUrl, thumbnailUrl: currentLot.thumbnailUrl, galleryImageUrls: currentLot.galleryImageUrls, galleryThumbnailUrls: currentLot.galleryThumbnailUrls, galleryOriginalUrls: currentLot.galleryOriginalUrls,
+  }
     : currentLotStatuses.includes(currentLot.auctionStatus) ? await getLotById(lotId) : currentLot;
   return {
     rooms,
@@ -587,10 +602,10 @@ export async function getRoomCatalogue(roomSlug: string, page: number) {
   const { data: room, error: roomError } = await client.from("auction_rooms").select(roomColumns).eq("slug", roomSlug).eq("is_active", true).maybeSingle();
   if (roomError) throwAuctionDataError("Could not load catalogue room", roomError);
   if (!room) return null;
-  const { data, error } = await client.from("lots").select(lotColumns).eq("room_id", room.id).in("status", upcomingLotStatuses)
+  const { data, error } = await client.from("lots").select(auctionCardColumns).eq("room_id", room.id).in("status", upcomingLotStatuses)
     .order("queue_position").order("created_at").order("id").range((page - 1) * size, page * size);
   if (error) throwAuctionDataError("Could not load room catalogue", error);
-  const rows = (data ?? []).slice(0, size);
+  const rows = (data ?? []).slice(0, size).map(cardLot);
   const images = await fetchLotImages(client, rows.map(lot => lot.id), true);
   return { lots: rows.map(lot => mapSupabaseLot({ lot, room, images: images.get(lot.id) ?? [], bids: [] })), hasNext: (data?.length ?? 0) > size };
 }

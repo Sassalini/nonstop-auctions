@@ -27,7 +27,7 @@ export function LotAudience({ lotId, enabled }: { lotId: string; enabled: boolea
       if ((event as CustomEvent<string>).detail === lotId) void refresh();
     };
     void refresh();
-    const interval = window.setInterval(onVisible, 15000);
+    const interval = window.setInterval(onVisible, 60000);
     window.addEventListener("auction-watchlist-changed", onWatch);
     window.addEventListener("online", onVisible);
     document.addEventListener("visibilitychange", onVisible);

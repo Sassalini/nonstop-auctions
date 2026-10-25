@@ -1,0 +1,149 @@
+{
+  "profile": {
+    "thumbnailMaxDimension": 400,
+    "displayMaxDimension": 1600
+  },
+  "originalBytes": 2891942,
+  "thumbnailBytes": 20154,
+  "displayBytes": 302200,
+  "uploadedBytesBefore": 2891942,
+  "uploadedBytesAfter": 3214296,
+  "samples": {
+    "homepage": {
+      "requests": 7,
+      "bytes": 20243594,
+      "paths": [
+        {
+          "path": "/storage/v1/object/sign/lot-photos/00000000-0000-0000-0000-000000000102/b737b5d1-7365-4954-b275-844d7a175212/3c0b2385-5d68-452d-9293-9e4f5211dfcd.png",
+          "bytes": 2891942
+        },
+        {
+          "path": "/storage/v1/object/sign/lot-photos/00000000-0000-0000-0000-000000000102/b737b5d1-7365-4954-b275-844d7a175212/1e35865f-8fa4-40a6-82af-9586b4a953b3.png",
+          "bytes": 2891942
+        },
+        {
+          "path": "/storage/v1/object/sign/lot-photos/00000000-0000-0000-0000-000000000102/b354f155-3550-4e0f-815a-b0e98f52a2d6/79baa17e-b71b-419f-a1d1-b5b99c47cae2.png",
+          "bytes": 2891942
+        },
+        {
+          "path": "/storage/v1/object/sign/lot-photos/00000000-0000-0000-0000-000000000102/ca02d1d9-ac0b-4010-ac8b-d5120c8f25dd/0cb6fccc-da58-4a8e-98d8-7dce2ece01d0.png",
+          "bytes": 2891942
+        },
+        {
+          "path": "/storage/v1/object/sign/lot-photos/00000000-0000-0000-0000-000000000102/f78f2634-764a-41bf-911a-02d0465a7bdf/4bec831d-a323-44ee-b40c-4dfddb62b458.png",
+          "bytes": 2891942
+        },
+        {
+          "path": "/storage/v1/object/sign/lot-photos/00000000-0000-0000-0000-000000000102/79e65f75-6834-4f09-bf36-1fb04fbd8222/a84c66bc-da20-4190-86a4-9414577333c3.png",
+          "bytes": 2891942
+        },
+        {
+          "path": "/storage/v1/object/sign/lot-photos/00000000-0000-0000-0000-000000000102/d7eafec9-ed6a-4adc-966c-fc5c4291c43f/1dc5bac6-e6db-4770-9a0e-f539dbc9906d.png",
+          "bytes": 2891942
+        }
+      ]
+    },
+    "room": {
+      "requests": 7,
+      "bytes": 20243594,
+      "paths": [
+        {
+          "path": "/storage/v1/object/sign/lot-photos/00000000-0000-0000-0000-000000000102/b737b5d1-7365-4954-b275-844d7a175212/3c0b2385-5d68-452d-9293-9e4f5211dfcd.png",
+          "bytes": 2891942
+        },
+        {
+          "path": "/storage/v1/object/sign/lot-photos/00000000-0000-0000-0000-000000000102/b737b5d1-7365-4954-b275-844d7a175212/1e35865f-8fa4-40a6-82af-9586b4a953b3.png",
+          "bytes": 2891942
+        },
+        {
+          "path": "/storage/v1/object/sign/lot-photos/00000000-0000-0000-0000-000000000102/b354f155-3550-4e0f-815a-b0e98f52a2d6/79baa17e-b71b-419f-a1d1-b5b99c47cae2.png",
+          "bytes": 2891942
+        },
+        {
+          "path": "/storage/v1/object/sign/lot-photos/00000000-0000-0000-0000-000000000102/ca02d1d9-ac0b-4010-ac8b-d5120c8f25dd/0cb6fccc-da58-4a8e-98d8-7dce2ece01d0.png",
+          "bytes": 2891942
+        },
+        {
+          "path": "/storage/v1/object/sign/lot-photos/00000000-0000-0000-0000-000000000102/f78f2634-764a-41bf-911a-02d0465a7bdf/4bec831d-a323-44ee-b40c-4dfddb62b458.png",
+          "bytes": 2891942
+        },
+        {
+          "path": "/storage/v1/object/sign/lot-photos/00000000-0000-0000-0000-000000000102/79e65f75-6834-4f09-bf36-1fb04fbd8222/a84c66bc-da20-4190-86a4-9414577333c3.png",
+          "bytes": 2891942
+        },
+        {
+          "path": "/storage/v1/object/sign/lot-photos/00000000-0000-0000-0000-000000000102/d7eafec9-ed6a-4adc-966c-fc5c4291c43f/1dc5bac6-e6db-4770-9a0e-f539dbc9906d.png",
+          "bytes": 2891942
+        }
+      ]
+    },
+    "account-watchlist-sales": {
+      "requests": 2,
+      "bytes": 5783884,
+      "paths": [
+        {
+          "path": "/storage/v1/object/sign/lot-photos/00000000-0000-0000-0000-000000000102/c8a22aab-1084-4742-aa25-1b05ddf3fbb5/cc6d14f7-5fcd-4fc5-9fed-fbf869d35a01.png",
+          "bytes": 2891942
+        },
+        {
+          "path": "/storage/v1/object/sign/lot-photos/00000000-0000-0000-0000-000000000102/837cd177-a65a-46aa-8982-0fd13ab9ba1c/9b2e913d-f3b8-42dc-aed8-4b052f971cc7.png",
+          "bytes": 2891942
+        }
+      ]
+    },
+    "purchase-history": {
+      "requests": 2,
+      "bytes": 5783884,
+      "paths": [
+        {
+          "path": "/storage/v1/object/sign/lot-photos/00000000-0000-0000-0000-000000000102/c8a22aab-1084-4742-aa25-1b05ddf3fbb5/cc6d14f7-5fcd-4fc5-9fed-fbf869d35a01.png",
+          "bytes": 2891942
+        },
+        {
+          "path": "/storage/v1/object/sign/lot-photos/00000000-0000-0000-0000-000000000102/837cd177-a65a-46aa-8982-0fd13ab9ba1c/9b2e913d-f3b8-42dc-aed8-4b052f971cc7.png",
+          "bytes": 2891942
+        }
+      ]
+    },
+    "catalogue": {
+      "requests": 1,
+      "bytes": 2891942,
+      "paths": [
+        {
+          "path": "/storage/v1/object/sign/lot-photos/00000000-0000-0000-0000-000000000102/a5db1875-9d67-4008-9582-286fe00886e8/8a4296d9-7f50-495e-857f-04740e31972a.png",
+          "bytes": 2891942
+        }
+      ]
+    },
+    "galleryNext": {
+      "requests": 0,
+      "bytes": 0,
+      "paths": []
+    },
+    "enlarged": {
+      "requests": 0,
+      "bytes": 0,
+      "paths": []
+    },
+    "warmReload": {
+      "requests": 0,
+      "bytes": 0,
+      "paths": []
+    },
+    "roomSwitch": {
+      "requests": 2,
+      "bytes": 5783884,
+      "paths": [
+        {
+          "path": "/storage/v1/object/sign/lot-photos/00000000-0000-0000-0000-000000000102/b7820bc8-0478-4ec2-98fb-e9f4c1e06c18/7e1f4822-b3aa-4153-ba3f-240531d8e7dc.png",
+          "bytes": 2891942
+        },
+        {
+          "path": "/storage/v1/object/sign/lot-photos/00000000-0000-0000-0000-000000000102/b7820bc8-0478-4ec2-98fb-e9f4c1e06c18/00912b81-5a8a-4482-bc48-400a9d0777af.png",
+          "bytes": 2891942
+        }
+      ]
+    }
+  },
+  "notes": "One real fixture PNG, replicated to nine lots with two photographs each; fresh browser cache per visit. Supabase fixture binary response bodies, excluding headers/TLS. Warm reload uses a primed same browser."
+}

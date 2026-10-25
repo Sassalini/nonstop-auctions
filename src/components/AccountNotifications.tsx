@@ -25,6 +25,8 @@ export function AccountNotifications() {
   const [unread, setUnread] = useState(0);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const openRef = useRef(open);
+  openRef.current = open;
   const container = useRef<HTMLDivElement>(null);
   const refreshRef = useRef<() => void>(() => {});
   const accountRef = useRef<string | null>(null);
@@ -64,14 +66,14 @@ export function AccountNotifications() {
       const version = ++request;
       try {
         const [list, count] = await Promise.all([
-          supabase.from("notifications").select("*").eq("user_id", account)
-            .order("created_at", { ascending: false }).order("id", { ascending: false }).limit(50),
+          openRef.current ? supabase.from("notifications").select("id,user_id,lot_id,kind,lot_title,lot_reference,auction_run,created_at,read_at").eq("user_id", account)
+            .order("created_at", { ascending: false }).order("id", { ascending: false }).limit(50) : Promise.resolve({ data: null, error: null }),
           supabase.from("notifications").select("id", { count: "exact", head: true })
             .eq("user_id", account).is("read_at", null),
         ]);
         if (cancelled || version !== request) return;
         if (list.error || count.error) throw new Error("Notifications unavailable");
-        setItems(list.data ?? []); setUnread(count.count ?? 0); setError("");
+        if (list.data) setItems(list.data); setUnread(count.count ?? 0); setError("");
       } catch {
         if (!cancelled && version === request) setError("Could not refresh notifications. Please try again.");
       } finally {
@@ -85,7 +87,7 @@ export function AccountNotifications() {
       .on("postgres_changes", { event: "*", schema: "public", table: "notifications", filter: `user_id=eq.${account}` }, () => { void refresh(true); })
       .subscribe((status) => { if (!cancelled && status === "SUBSCRIBED") void refresh(); });
     const onVisible = () => { if (document.visibilityState === "visible") void refresh(); };
-    const interval = window.setInterval(onVisible, 15000);
+    const interval = window.setInterval(onVisible, 60000);
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("online", onVisible);
     return () => {
@@ -131,7 +133,7 @@ export function AccountNotifications() {
 
   return <div ref={container} className="relative">
     <button type="button" aria-label={`Notifications${unread ? ` (${unread} unread)` : ""}`} aria-expanded={open} aria-controls="account-notifications"
-      onClick={() => { setOpen(!open); if (!open) refreshRef.current(); }}
+      onClick={() => { openRef.current = !open; setOpen(!open); if (!open) refreshRef.current(); }}
       className="relative flex size-10 items-center justify-center rounded-lg text-auction-ivory transition hover:bg-white/[0.05]">
       <Bell size={20} strokeWidth={1.8} aria-hidden="true" />
       {unread > 0 ? <span className="absolute -right-1 top-0 min-w-4 rounded-full bg-auction-gold px-1 text-center text-[10px] font-semibold text-black">{unread > 99 ? "99+" : unread}</span> : null}

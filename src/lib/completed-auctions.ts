@@ -18,9 +18,16 @@ export async function getCompletedAuctions(mode: "buyer" | "seller", page = 1, l
   });
   if (error) throw new Error("Could not load completed auctions. Please try again.");
   const records = (data ?? []).slice(0, historyPageSize);
-  // Sign only the thumbnail of the visible page, not every image of every sale.
+  // The legacy history RPC contains original paths, not image IDs. Resolve only
+  // this bounded page to stable thumbnail endpoints, without signing originals.
+  const paths = records.flatMap(row => row.storage_path ? [row.storage_path] : []);
+  const lookup = paths.length ? await client.from("lot_images").select("id,storage_path,thumbnail_path,display_path").in("storage_path", paths) : { data: [], error: null };
+  if (lookup.error) throw new Error("Could not load auction photographs.");
+  const variants = new Map((lookup.data ?? []).map(image => [image.storage_path, image]));
+  const ids = new Map((lookup.data ?? []).map(image => [image.storage_path, image.id]));
   const photos = await resolveLotPhotos(client, records.map(row => ({
-    id: row.lot_id, lot_id: row.lot_id, image_url: row.image_url ?? "", storage_path: row.storage_path,
+    id: ids.get(row.storage_path) ?? row.lot_id, lot_id: row.lot_id, image_url: row.storage_path && !ids.has(row.storage_path) ? "" : row.image_url ?? "", storage_path: ids.has(row.storage_path) ? row.storage_path : null,
+    thumbnail_path: variants.get(row.storage_path)?.thumbnail_path, display_path: variants.get(row.storage_path)?.display_path,
     alt_text: row.title, sort_order: 0, created_at: row.completed_at,
   })));
   const urls = new Map(photos.map(photo => [photo.lot_id, photo.image_url]));

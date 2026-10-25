@@ -40,17 +40,17 @@ export default async function MyAuctionsPage({ searchParams }: { searchParams: P
       title="Track bids, watched lots, and seller activity."
       description="Your watched lots and bid activity, together in one place."
     >
-      <nav className="mb-5 flex flex-wrap gap-5 text-auction-gold"><Link href="/won-auctions">Won Auctions</Link><a href="#sold-auctions">Sold Auctions</a></nav>
+      <nav className="mb-5 flex flex-wrap gap-5 text-auction-gold"><Link prefetch={false} href="/won-auctions">Won Auctions</Link><a href="#sold-auctions">Sold Auctions</a></nav>
       <CompletedAuctions mode="seller" history={history} />
       {submitted ? <p role="status" className="mb-5 rounded-lg border border-auction-gold/30 bg-auction-panel/90 p-4 text-sm text-auction-gold">Listing submitted successfully to the auction room queue.</p> : null}
       <section className="mb-5 rounded-lg border border-white/10 bg-auction-panel/90 p-5 shadow-glow">
-        <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-lg font-semibold text-auction-ivory">Your Listings</h2><Link href="/sell" className="text-sm text-auction-gold underline">Sell an item</Link></div>
+        <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-lg font-semibold text-auction-ivory">Your Listings</h2><Link prefetch={false} href="/sell" className="text-sm text-auction-gold underline">Sell an item</Link></div>
         {!sellerResult.data?.length ? <p className="mt-3 text-sm text-auction-muted">You have no listings yet.</p> : null}
         <div className="divide-y divide-white/10">{sellerResult.data?.filter(lot => lot.status !== "SOLD").map(lot => {
           const room = roomResult.data?.find(room => room.id === lot.room_id);
           return <article key={lot.id} className="py-4">
             <p className="mb-1 text-xs text-auction-muted">Lot {lot.lot_reference}</p>
-            <h3 className="break-words font-semibold text-auction-ivory">{lot.status === "DRAFT" ? lot.title : <Link href={`/lots/${lot.id}?view=manual`} className="hover:text-auction-gold">{lot.title}</Link>}</h3>
+            <h3 className="break-words font-semibold text-auction-ivory">{lot.status === "DRAFT" ? lot.title : <Link prefetch={false} href={`/lots/${lot.id}?view=manual`} className="hover:text-auction-gold">{lot.title}</Link>}</h3>
             <p className="mt-1 text-sm text-auction-muted">{room?.name ?? "Auction room"} · {lot.status === "DRAFT" ? "Unfinished submission" : lot.status === "UNSOLD" ? "Unsold — queued for another attempt" : getLotStatusLabel(lot.status)} · {lot.status === "ACTIVE_BIDDING" ? `Current bid: ${formatCurrency(Number(lot.current_bid))}` : `Starting bid: ${formatCurrency(Number(lot.starting_bid))}`}</p>
             {lot.status === "DRAFT" && lot.submission_key ? <SellerDraftActions lotId={lot.id} submissionKey={lot.submission_key} /> : lot.status !== "DRAFT" ? <SellerListingManagement key={`${lot.id}:${lot.status}:${lot.relist_unlimited}:${lot.max_auto_relistings}:${lot.auto_relistings_used}:${lot.completed_attempts}:${lot.removal_requested_at}:${lot.pending_relist_unlimited}:${lot.pending_max_auto_relistings}`} lot={lot} /> : null}
           </article>;
@@ -63,7 +63,7 @@ export default async function MyAuctionsPage({ searchParams }: { searchParams: P
               <h2 className="text-lg font-semibold text-auction-ivory">Watched Lots</h2>
               <p className="mt-1 text-sm text-auction-muted">Live and upcoming lots on your list.</p>
             </div>
-            <Link
+            <Link prefetch={false}
               href="/"
               className="flex h-10 items-center gap-2 rounded-md border border-auction-gold/40 px-3 text-sm text-auction-gold transition hover:bg-auction-gold hover:text-black"
             >
@@ -75,7 +75,7 @@ export default async function MyAuctionsPage({ searchParams }: { searchParams: P
           <div className="divide-y divide-white/10">
             {!watchedLots.length ? <p className="p-5 text-sm text-auction-muted">You are not watching any available lots yet.</p> : null}
             {watchedLots.map((lot) => (
-              <Link
+              <Link prefetch={false}
                 href={`/lots/${lot.id}?view=manual`}
                 key={lot.id}
                 className="grid gap-4 p-4 transition hover:bg-white/[0.035] sm:grid-cols-[96px_minmax(0,1fr)_auto] sm:items-center sm:p-5"

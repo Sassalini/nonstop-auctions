@@ -84,7 +84,7 @@ test('multiple images submit once, appear in My Auctions, gallery and the select
   const link = page.getByRole('link',{ name:'Seller porcelain vase',exact:true });
   await link.click();
   await expect(page.getByRole('heading',{ name:'Seller porcelain vase',exact:true })).toBeVisible();
-  await expect(page.locator('img[src*="/object/sign/lot-photos/"]').first()).toBeVisible();
+  await expect(page.locator('img[src*="/api/lot-photos/"]').first()).toBeVisible();
   await page.goto('/rooms/general-room');
   await expect(page.getByRole('heading',{ name:'Seller porcelain vase',exact:true })).toBeVisible();
 });
@@ -118,7 +118,7 @@ test('discard removes an unfinished listing and its registered photos', async ({
   await request.post(fixture,{ data:{ failUploadAfter:1 } });
   await page.getByRole('button',{ name:'Submit listing',exact:true }).click();
   await expect(page.getByRole('status')).toContainText('saved in My Auctions');
-  expect(await (await request.get('http://127.0.0.1:54399/_test/seller-state')).json()).toEqual({ lots:1,images:2,objects:1 });
+  expect(await (await request.get('http://127.0.0.1:54399/_test/seller-state')).json()).toEqual({ lots:1,images:1,objects:1 });
   await page.goto('/my-auctions');
   await page.getByRole('button',{ name:'Discard draft',exact:true }).click();
   await page.getByRole('button',{ name:'Confirm discard draft and photos',exact:true }).click();

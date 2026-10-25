@@ -25,7 +25,7 @@ export function AuctionClockProvider({ databaseRoomId, children }: {
     };
     const onVisible = () => { if (document.visibilityState === "visible") void syncClock(); };
     void syncClock();
-    const interval = window.setInterval(() => { void syncClock(); }, 30000);
+    const interval = window.setInterval(onVisible, 30000);
     window.addEventListener("online", syncClock);
     document.addEventListener("visibilitychange", onVisible);
     return () => {

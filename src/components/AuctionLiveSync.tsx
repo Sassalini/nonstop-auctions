@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useAuctionClockOffset } from "@/components/AuctionClockProvider";
 import { isTimedLifecycleStatus } from "@/lib/auction-lifecycle";
+import { useLiveAudience } from "@/components/LiveAudienceProvider";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { LotStatus } from "@/lib/supabase/types";
 
@@ -17,6 +18,7 @@ type AuctionLiveSyncProps = {
 
 export function AuctionLiveSync({ databaseRoomId, lotId, status, endsAt }: AuctionLiveSyncProps) {
   const router = useRouter();
+  const { connected } = useLiveAudience();
   const inFlight = useRef(false);
   const [syncError, setSyncError] = useState("");
   const [, startTransition] = useTransition();
@@ -48,33 +50,22 @@ export function AuctionLiveSync({ databaseRoomId, lotId, status, endsAt }: Aucti
 
   useEffect(() => {
     if (!databaseRoomId) return;
-    const supabase = createSupabaseBrowserClient();
     let cancelled = false;
     let refreshTimeout: number | undefined;
-    const requestRefresh = () => {
+    const requestRefresh = (event: Event) => {
+      const payload = (event as CustomEvent<{ new: { room_id?: string }; old: { room_id?: string } }>).detail;
+      if (payload.new.room_id !== databaseRoomId && payload.old.room_id !== databaseRoomId) return;
       if (cancelled || refreshTimeout !== undefined) return;
-      refreshTimeout = window.setTimeout(() => {
-        refreshTimeout = undefined;
-        if (!cancelled) refreshAuction();
-      }, 100);
+      refreshTimeout = window.setTimeout(() => { refreshTimeout = undefined; if (!cancelled) refreshAuction(); }, 100);
     };
-    const channel = supabase.channel(`auction-room-${databaseRoomId}`).on("postgres_changes", {
-      event: "*", schema: "public", table: "lots", filter: `room_id=eq.${databaseRoomId}`,
-    }, requestRefresh).subscribe((channelStatus) => {
-      if (cancelled) return;
-      if (channelStatus === "SUBSCRIBED") {
-        setSyncError("");
-        // Recover changes missed while disconnected, including an empty room becoming eligible.
-        void recoverAuction();
-      } else if (channelStatus === "CHANNEL_ERROR" || channelStatus === "TIMED_OUT") {
-        setSyncError("Live updates disconnected. Reconnecting automatically.");
-      }
-    });
+    window.addEventListener("auction-lot-change", requestRefresh);
+    // Initial/reconnected feed reconciles anything missed while disconnected.
+    if (connected) { setSyncError(""); void recoverAuction(); }
     const onVisible = () => { if (document.visibilityState === "visible") void recoverAuction(); };
     const onOnline = () => { void recoverAuction(); };
     const interval = window.setInterval(() => {
       if (document.visibilityState === "visible") void recoverAuction();
-    }, 15000);
+    }, connected ? 60000 : 15000);
     window.addEventListener("online", onOnline);
     document.addEventListener("visibilitychange", onVisible);
     return () => {
@@ -83,9 +74,9 @@ export function AuctionLiveSync({ databaseRoomId, lotId, status, endsAt }: Aucti
       if (refreshTimeout !== undefined) window.clearTimeout(refreshTimeout);
       window.removeEventListener("online", onOnline);
       document.removeEventListener("visibilitychange", onVisible);
-      void supabase.removeChannel(channel);
+      window.removeEventListener("auction-lot-change", requestRefresh);
     };
-  }, [databaseRoomId, refreshAuction, recoverAuction]);
+  }, [databaseRoomId, connected, refreshAuction, recoverAuction]);
 
   return syncError ? (
     <div role="alert" className="fixed bottom-4 right-4 z-50 max-w-sm rounded-md border border-auction-danger/40 bg-black/90 px-4 py-3 text-sm text-auction-ivory shadow-2xl">{syncError}</div>

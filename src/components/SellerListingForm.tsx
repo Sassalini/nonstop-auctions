@@ -6,11 +6,12 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Upload, X } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { createPhotoVariants } from "@/lib/photo-variants";
 import { RelistingControls } from "@/components/RelistingControls";
 import { parseRelistingLimit, MAX_PHOTOS, PHOTO_BUCKET, parseStartingBid, photoExtensions, validatePhoto } from "@/lib/seller-validation";
 import type { AuctionRoomRow, LotImageRow, LotRow } from "@/lib/supabase/types";
 
-type Photo = { id: string; url: string; file?: File; path?: string; uploaded: boolean };
+type Photo = { id: string; url: string; file?: File; path?: string; thumbnailPath?: string; displayPath?: string; variants?: { thumb: Blob; display: Blob }; uploaded: boolean };
 const fieldClass = "w-full rounded-md border border-white/10 bg-black/35 px-3 text-sm text-auction-ivory outline-none transition focus:border-auction-gold disabled:opacity-50";
 
 export function SellerListingForm({ rooms, userId, draft, initialPhotos, loadError }: {
@@ -23,7 +24,7 @@ export function SellerListingForm({ rooms, userId, draft, initialPhotos, loadErr
   const [relistingLimit, setRelistingLimit] = useState(String(draft?.max_auto_relistings ?? 5));
   const [unlimited, setUnlimited] = useState(draft?.relist_unlimited ?? false);
   const [description, setDescription] = useState(draft?.description ?? "");
-  const [photos, setPhotos] = useState<Photo[]>(initialPhotos.map(photo => ({ id: photo.id, url: photo.image_url, path: photo.storage_path ?? undefined, uploaded: Boolean(photo.image_url) })));
+  const [photos, setPhotos] = useState<Photo[]>(initialPhotos.map(photo => ({ id: photo.id, url: photo.image_url, path: photo.storage_path ?? undefined, thumbnailPath: photo.thumbnail_path ?? undefined, displayPath: photo.display_path ?? undefined, uploaded: Boolean(photo.image_url) })));
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [photoError, setPhotoError] = useState("");
@@ -39,8 +40,13 @@ export function SellerListingForm({ rooms, userId, draft, initialPhotos, loadErr
     working.current = true; setBusy(true); setPhotoError("");
     try {
       if (photos.length + files.length > MAX_PHOTOS) throw new Error("Choose up to 10 photos per item.");
-      for (const file of files) await validatePhoto(file);
-      setPhotos(current => [...current, ...files.map(file => ({ id: crypto.randomUUID(), url: URL.createObjectURL(file), file, uploaded: false }))]);
+      const prepared: Photo[] = [];
+      for (const file of files) {
+        await validatePhoto(file);
+        const variants = await createPhotoVariants(file);
+        prepared.push({ id: crypto.randomUUID(), url: "", file, variants, uploaded: false });
+      }
+      setPhotos(current => [...current, ...prepared.map(photo => ({ ...photo, url: URL.createObjectURL(photo.variants!.thumb) }))]);
     } catch (error) { setPhotoError(error instanceof Error ? error.message : "Could not read these photos."); }
     finally { working.current = false; setBusy(false); }
   }
@@ -51,7 +57,7 @@ export function SellerListingForm({ rooms, userId, draft, initialPhotos, loadErr
     try {
       if (photo.path) {
         const client = createSupabaseBrowserClient();
-        const { error } = await client.storage.from(PHOTO_BUCKET).remove([photo.path]);
+        const { error } = await client.storage.from(PHOTO_BUCKET).remove([photo.path, photo.thumbnailPath, photo.displayPath].filter((path): path is string => Boolean(path)));
         if (error) throw error;
         const removed = await client.rpc("remove_seller_photo", { p_image_id: photo.id });
         if (removed.error) throw removed.error;
@@ -86,15 +92,42 @@ export function SellerListingForm({ rooms, userId, draft, initialPhotos, loadErr
       lotRef.current = saved.data;
       if (saved.data.status === "DRAFT") {
         for (const photo of photos) {
-          if (photo.uploaded) continue;
-          const prepared = await client.rpc("prepare_seller_photo", { p_lot_id: saved.data.id, p_image_id: photo.id, p_extension: photoExtensions[photo.file!.type] });
+          const extension = photo.file ? photoExtensions[photo.file.type] : photo.path?.split(".").at(-1);
+          if (!extension) throw new Error("Remove and reselect the interrupted photo.");
+          const prepared = await client.rpc("prepare_seller_photo_variants", { p_lot_id: saved.data.id, p_image_id: photo.id, p_extension: extension });
           if (prepared.error) throw prepared.error;
           photo.path = prepared.data.storage_path!;
-          // Never overwrite: the preceding upload response may have been lost.
-          const existing = await client.storage.from(PHOTO_BUCKET).info(photo.path);
-          if (!existing.data) {
-            const uploaded = await client.storage.from(PHOTO_BUCKET).upload(photo.path, photo.file!, { contentType: photo.file!.type, upsert: false });
-            if (uploaded.error) throw uploaded.error;
+          photo.thumbnailPath = prepared.data.thumbnail_path!; photo.displayPath = prepared.data.display_path!;
+          const paths = [photo.path, photo.thumbnailPath, photo.displayPath];
+          const present = await Promise.all(paths.map(path => client.storage.from(PHOTO_BUCKET).info(path)));
+          if (present.some(result => !result.data)) {
+            let original: Blob | undefined = photo.file;
+            if (!original && !present[0].error) {
+              const existing = await client.storage.from(PHOTO_BUCKET).download(photo.path);
+              if (existing.error) throw existing.error; original = existing.data;
+            }
+            if (!original) throw new Error("Remove and reselect the interrupted photo.");
+            const variants = photo.variants ?? await createPhotoVariants(original);
+            const objects = [original, variants.thumb, variants.display];
+            const createdVariants: string[] = [];
+            try {
+              for (let index = 0; index < paths.length; index++) {
+                if (present[index].data) continue;
+                // Immutable paths, no overwrite. A retry recognises completed objects.
+                const uploaded = await client.storage.from(PHOTO_BUCKET).upload(paths[index], objects[index], { contentType: objects[index].type, cacheControl: "3600", upsert: false });
+                if (uploaded.error) throw uploaded.error;
+                if (index > 0) createdVariants.push(paths[index]);
+              }
+            } catch (error) {
+              // Remove only derivatives confirmed created by this attempt. Keep
+              // originals, pre-existing variants and every persistent reference.
+              // A lost response is ambiguous: retry/discard reconciles it safely.
+              if (createdVariants.length) {
+                const cleanup = await client.storage.from(PHOTO_BUCKET).remove(createdVariants);
+                if (cleanup.error) throw new Error("Photo upload interrupted and cleanup could not finish. Resume or discard the saved draft to reconcile its registered files.");
+              }
+              throw error;
+            }
           }
           photo.uploaded = true;
           setPhotos([...photos]);

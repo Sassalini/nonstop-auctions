@@ -45,7 +45,7 @@ export function AppHeader() {
   return (
     <header className="sticky top-0 z-40 border-b border-white/10 bg-auction-black/75 shadow-[0_10px_30px_rgba(0,0,0,0.24)] backdrop-blur-xl">
       <div className="mx-auto flex min-h-[74px] max-w-[1880px] items-center gap-3 px-4 sm:px-5 lg:px-7">
-        <Link href="/" className="flex shrink-0 items-center gap-3 text-auction-ivory">
+        <Link prefetch={false} href="/" className="flex shrink-0 items-center gap-3 text-auction-ivory">
           <span className="flex size-10 items-center justify-center rounded-lg border border-auction-gold/30 bg-auction-panel text-auction-gold">
             <AuctionLogoMark />
           </span>
@@ -57,7 +57,7 @@ export function AppHeader() {
         <nav className="hidden items-center gap-1 lg:flex">
           <LiveNavigationLink className="whitespace-nowrap rounded-md px-3 py-2 text-sm text-auction-muted transition hover:bg-white/[0.04] hover:text-auction-ivory" />
           {navItems.map((item) => (
-            <Link
+            <Link prefetch={false}
               key={item.href}
               href={item.href}
               className="whitespace-nowrap rounded-md px-3 py-2 text-sm text-auction-muted transition hover:bg-white/[0.04] hover:text-auction-ivory"
@@ -85,7 +85,7 @@ export function AppHeader() {
 
         <div className="ml-auto flex items-center gap-1 sm:gap-2">
           <AccountNotifications />
-          <Link
+          <Link prefetch={false}
             href="/my-auctions"
             title="Watchlist"
             className="hidden size-10 items-center justify-center rounded-lg text-auction-ivory transition hover:bg-white/[0.05] md:flex"

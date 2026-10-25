@@ -1,5 +1,5 @@
 import { lotPrice } from "@/lib/lot-price";
-import Image from "next/image";
+import { LotPhoto as Image } from "@/components/LotPhoto";
 import Link from "next/link";
 import { AuctionStatusBadge } from "@/components/AuctionStatusBadge";
 import { CountdownTimer } from "@/components/CountdownTimer";

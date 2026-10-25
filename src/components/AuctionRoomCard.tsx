@@ -1,4 +1,4 @@
-import Image from "next/image";
+import { LotPhoto as Image } from "@/components/LotPhoto";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { AuctionStatusBadge } from "@/components/AuctionStatusBadge";
@@ -23,7 +23,7 @@ export function AuctionRoomCard({
   const status = liveLot?.auctionStatus ?? "WAITING";
 
   return (
-    <Link
+    <Link prefetch={false}
       href={`/rooms/${room.id}`}
       className={`group relative min-h-[150px] overflow-hidden rounded-lg border transition ${
         isActive

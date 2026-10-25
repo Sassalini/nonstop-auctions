@@ -81,6 +81,8 @@ export type LotRow = {
 };
 
 export type LotImageRow = {
+  thumbnail_path?: string | null;
+  display_path?: string | null;
   storage_path: string | null;
   id: string;
   lot_id: string;
@@ -296,6 +298,8 @@ export type Database = {
       completed_auctions_page: { Args: { p_mode: "buyer" | "seller"; p_limit?: number; p_offset?: number; p_lot_id?: string }; Returns: { lot_id: string; title: string; sale_price: number; completed_at: string; seller_name: string; buyer_name: string; is_buyer: boolean; image_url: string | null; storage_path: string | null }[] };
       my_completed_auctions: { Args: Record<string, never>; Returns: { lot_id: string; sale_price: number; completed_at: string; seller_name: string; buyer_name: string; is_buyer: boolean }[] };
       save_seller_draft: { Args: { p_submission_key: string; p_room_id: string; p_title: string; p_description: string; p_starting_bid: number }; Returns: LotRow };
+      prepare_seller_photo_variants: { Args: { p_lot_id: string; p_image_id: string; p_extension: string }; Returns: LotImageRow };
+      lot_photo_delivery: { Args: { p_image_id: string; p_size: string }; Returns: { object_path: string; fallback_path: string; public_cache: boolean }[] };
       prepare_seller_photo: { Args: { p_lot_id: string; p_image_id: string; p_extension: string }; Returns: LotImageRow };
       remove_seller_photo: { Args: { p_image_id: string }; Returns: undefined };
       submit_seller_lot: { Args: { p_lot_id: string }; Returns: LotRow };

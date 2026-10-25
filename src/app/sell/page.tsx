@@ -35,6 +35,8 @@ export default async function SellPage({ searchParams }: { searchParams: Promise
       const imageResult = await client.from("lot_images").select("*").eq("lot_id", draft.id).order("sort_order");
       if (imageResult.error) throw new Error("Could not load your photos. Please try again.");
       photos = await resolveLotPhotos(client, imageResult.data ?? []);
+      const present = await Promise.all(photos.map(photo => photo.storage_path ? client.storage.from("lot-photos").info(photo.storage_path) : Promise.resolve({ data: true })));
+      photos = photos.map((photo, index) => present[index].data ? photo : { ...photo, image_url: "" });
     }
   } catch (error) { loadError = error instanceof Error ? error.message : "Seller submissions are temporarily unavailable."; }
   return <InteriorShell eyebrow="Sell With Nonstop" title="Sell an Item."

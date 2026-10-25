@@ -1,6 +1,6 @@
 "use client";
 import { useMemo, useState } from "react";
-import Image from "next/image";
+import { LotPhoto as Image } from "@/components/LotPhoto";
 import { ChevronLeft, ChevronRight, Maximize2 } from "lucide-react";
 import { Modal } from "@/components/Modal";
 import type { Lot } from "@/lib/auction-data";
@@ -34,13 +34,13 @@ function Gallery({ lot }: { lot: Lot }) {
    <p aria-live="polite" className="absolute bottom-3 left-3 rounded bg-black/80 px-2 py-1 text-xs text-auction-ivory">Photograph {index + 1} of {images.length}</p>
   </div>
   {images.length > 1 ? <div className="grid grid-cols-4 gap-2 sm:grid-cols-5">
-   {images.map((url, photoIndex) => <button key={url} type="button" aria-label={`Show photograph ${photoIndex + 1}`} aria-pressed={index === photoIndex} onClick={() => setSelectedIndex(photoIndex)} className={`relative aspect-[4/3] overflow-hidden rounded-md border transition ${index === photoIndex ? "border-auction-gold shadow-glow" : "border-white/10 hover:border-auction-gold/50"}`}>
-    <Image src={url} alt={`${lot.title} view ${photoIndex + 1}`} fill sizes="120px" className="object-cover" />
+   {images.map((url, photoIndex) => <button key={url.split("?")[0] + photoIndex} type="button" aria-label={`Show photograph ${photoIndex + 1}`} aria-pressed={index === photoIndex} onClick={() => setSelectedIndex(photoIndex)} className={`relative aspect-[4/3] overflow-hidden rounded-md border transition ${index === photoIndex ? "border-auction-gold shadow-glow" : "border-white/10 hover:border-auction-gold/50"}`}>
+    <Image src={lot.galleryThumbnailUrls?.[lot.galleryImageUrls?.indexOf(url) ?? photoIndex] ?? url} loading="lazy" alt={`${lot.title} view ${photoIndex + 1}`} fill sizes="120px" className="object-cover" />
    </button>)}
   </div> : null}
   {expanded ? <Modal title={`${lot.title} — photograph ${index + 1} of ${images.length}`} closeLabel="Close image viewer" onDismiss={() => setExpanded(false)} onKeyDown={event => { event.stopPropagation(); keys(event); }}>
    <div className="relative h-[70dvh] min-h-40 w-full">
-    <Image src={selected} alt={`${lot.title} full-size photograph ${index + 1}`} fill sizes="100vw" className="object-contain" />
+    <Image src={lot.galleryOriginalUrls?.[lot.galleryImageUrls?.indexOf(selected) ?? index] ?? selected} loading="eager" alt={`${lot.title} full-size photograph ${index + 1}`} fill sizes="100vw" className="object-contain" />
     {arrows(true)}
    </div>
   </Modal> : null}

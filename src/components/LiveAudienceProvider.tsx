@@ -31,6 +31,8 @@ export function LiveAudienceProvider({ children }: { children: React.ReactNode }
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [connected, setConnected] = useState(false);
   const [lots, setLots] = useState<LiveLotCandidate[]>([]);
+  const lotsRef = useRef(lots);
+  lotsRef.current = lots;
   const viewedLot = useRef<{ id: string; token: symbol } | null>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
   const subscribed = useRef(false);
@@ -100,7 +102,17 @@ export function LiveAudienceProvider({ children }: { children: React.ReactNode }
       config: { presence: { key: anonymousSessionKey(), enabled: true } },
     }).on("presence", { event: "sync" }, () => {
       if (!cancelled) setCounts(countLotViewers(channel.presenceState<{ lot_id: string }>()));
-    }).on("postgres_changes", { event: "*", schema: "public", table: "lots" }, requestRefresh)
+    }).on("postgres_changes", { event: "*", schema: "public", table: "lots" }, payload => {
+      // Share this existing global feed with the selected room, avoiding delivery
+      // of the same full Postgres row through a second subscription.
+      if (document.visibilityState !== "visible") return;
+      window.dispatchEvent(new CustomEvent("auction-lot-change", { detail: payload }));
+      const after = payload.new as { id?: string; status?: string; room_id?: string };
+      const wasCurrent = lotsRef.current.some(lot => lot.id === after.id);
+      const isCurrent = ["PREVIEW", "FIRST_BID_WINDOW", "ACTIVE_BIDDING"].includes(after.status ?? "");
+      // Live navigation needs membership, not prices, descriptions or bid resets.
+      if (payload.eventType !== "UPDATE" || !after.id || !after.status || wasCurrent !== isCurrent) requestRefresh();
+    })
       .on("postgres_changes", { event: "*", schema: "public", table: "auction_rooms" }, requestRefresh);
     channelRef.current = channel;
     channel.subscribe((status) => {
@@ -117,7 +129,7 @@ export function LiveAudienceProvider({ children }: { children: React.ReactNode }
     const onHide = () => { if (subscribed.current) void channel.untrack(); };
     const interval = window.setInterval(() => {
       if (document.visibilityState === "visible") void refreshLots();
-    }, 15000);
+    }, 60000);
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("online", onVisible);
     window.addEventListener("pageshow", onVisible);

@@ -1,0 +1,107 @@
+{
+  "initial": {
+    "requests": 44,
+    "bytes": 12417,
+    "byPath": {
+      "/auth/v1/user": {
+        "requests": 6,
+        "bytes": 1164
+      },
+      "/rest/v1/watchlist": {
+        "requests": 3,
+        "bytes": 149
+      },
+      "/rest/v1/bids": {
+        "requests": 2,
+        "bytes": 4
+      },
+      "/rest/v1/lots": {
+        "requests": 10,
+        "bytes": 2782
+      },
+      "/rest/v1/auction_rooms": {
+        "requests": 8,
+        "bytes": 2984
+      },
+      "/rest/v1/rpc/completed_auctions_page_with_reference": {
+        "requests": 2,
+        "bytes": 4
+      },
+      "/rest/v1/lot_images": {
+        "requests": 6,
+        "bytes": 2484
+      },
+      "/rest/v1/rpc/advance_room_lifecycle": {
+        "requests": 3,
+        "bytes": 2811
+      },
+      "/rest/v1/rpc/lot_watchlist_count": {
+        "requests": 1,
+        "bytes": 1
+      },
+      "/rest/v1/rpc/auction_server_time": {
+        "requests": 1,
+        "bytes": 26
+      },
+      "/rest/v1/notifications": {
+        "requests": 2,
+        "bytes": 8
+      }
+    }
+  },
+  "idle32s": {
+    "requests": 1,
+    "bytes": 26,
+    "byPath": {
+      "/rest/v1/rpc/auction_server_time": {
+        "requests": 1,
+        "bytes": 26
+      }
+    }
+  },
+  "fiveEvents": {
+    "requests": 35,
+    "bytes": 16920,
+    "byPath": {
+      "/auth/v1/user": {
+        "requests": 5,
+        "bytes": 970
+      },
+      "/rest/v1/lots": {
+        "requests": 10,
+        "bytes": 4310
+      },
+      "/rest/v1/auction_rooms": {
+        "requests": 5,
+        "bytes": 2815
+      },
+      "/rest/v1/rpc/advance_room_lifecycle": {
+        "requests": 5,
+        "bytes": 4685
+      },
+      "/rest/v1/lot_images": {
+        "requests": 10,
+        "bytes": 4140
+      }
+    }
+  },
+  "channels": {
+    "joins": 4,
+    "leaves": 0,
+    "tracks": 2,
+    "receivedBytes": 2253,
+    "sentBytes": 1715,
+    "sockets": 1,
+    "channels": 2
+  },
+  "afterNavigation": {
+    "joins": 6,
+    "leaves": 0,
+    "tracks": 3,
+    "receivedBytes": 3248,
+    "sentBytes": 4434,
+    "sockets": 1,
+    "channels": 2
+  },
+  "notes": "Fixture uncompressed JSON bodies, not production wire bytes. Gallery uses local fixture photographs; no production image-size claim."
+}

@@ -1,4 +1,4 @@
-import Image from "next/image";
+import { LotPhoto as Image } from "@/components/LotPhoto";
 import Link from "next/link";
 import { getCompletedAuctions, type CompletedAuctionPage } from "@/lib/completed-auctions";
 import { formatCurrency } from "@/lib/format";
@@ -14,7 +14,7 @@ export async function CompletedAuctions({ mode, history: prepared }: { mode: "bu
   {!records.length ? <p className="mt-4 text-sm text-auction-muted">No completed auctions yet.</p> : null}
   <div className="divide-y divide-white/10">{records.map(record => <article id={record.lot_id} key={record.lot_id} className="flex flex-wrap gap-4 py-5">
     <Image src={record.image_url || "/images/auction-house-background.png"} alt={record.title} width={112} height={84} className="h-20 w-28 rounded-md object-cover" />
-    <div className="min-w-0 flex-1"><p className="mb-1 text-xs text-auction-muted">Lot {record.lot_reference}</p><Link href={`/lots/${record.lot_id}?view=manual`} className="break-words font-semibold text-auction-gold">{record.title}</Link>
+    <div className="min-w-0 flex-1"><p className="mb-1 text-xs text-auction-muted">Lot {record.lot_reference}</p><Link prefetch={false} href={`/lots/${record.lot_id}?view=manual`} className="break-words font-semibold text-auction-gold">{record.title}</Link>
      {mode === "buyer" ? <p className="mt-1 text-sm text-auction-ivory">You won this auction.</p> : null}
      <p className="mt-1 text-sm text-auction-ivory">Sold for: {formatCurrency(Number(record.sale_price))}</p>
      <p className="mt-1 text-sm text-auction-muted">{mode === "buyer" ? `Seller: ${record.seller_name}` : `Winning bidder: ${record.buyer_name}`}</p>
@@ -22,10 +22,10 @@ export async function CompletedAuctions({ mode, history: prepared }: { mode: "bu
     </div>
    </article>)}</div>
   {focused || page > 1 || hasNext ? <nav aria-label={`${mode === "buyer" ? "Won" : "Sold"} auction pages`} className="mt-4 flex flex-wrap gap-5 text-sm text-auction-gold">
-    {focused ? <Link href={`${path}#${anchor}`}>View all {mode === "buyer" ? "Won" : "Sold"} Auctions</Link> : <>
-      {page > 1 ? <Link href={`${path}?historyPage=${page - 1}#${anchor}`}>Previous</Link> : null}
+    {focused ? <Link prefetch={false} href={`${path}#${anchor}`}>View all {mode === "buyer" ? "Won" : "Sold"} Auctions</Link> : <>
+      {page > 1 ? <Link prefetch={false} href={`${path}?historyPage=${page - 1}#${anchor}`}>Previous</Link> : null}
       <span className="text-auction-muted">Page {page}</span>
-      {hasNext ? <Link href={`${path}?historyPage=${page + 1}#${anchor}`}>Next</Link> : null}
+      {hasNext ? <Link prefetch={false} href={`${path}?historyPage=${page + 1}#${anchor}`}>Next</Link> : null}
     </>}
   </nav> : null}
  </section>;

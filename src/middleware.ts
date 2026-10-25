@@ -23,7 +23,8 @@ export async function middleware(request: NextRequest) {
   });
   // Verify remotely; never use an unverified client session to authorize a page.
   await supabase.auth.getUser();
-  response.headers.set("Cache-Control", "private, no-store");
+  // Photo responses set their own private/public-visible browser cache policy.
+  if (!request.nextUrl.pathname.startsWith("/api/lot-photos/")) response.headers.set("Cache-Control", "private, no-store");
   return response;
 }
 

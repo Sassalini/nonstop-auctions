@@ -1,6 +1,7 @@
 // Test-only local Supabase HTTP fixture. Never uses .env.local or a hosted database.
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 
 const room = { id: '10000000-0000-0000-0000-000000000007', slug: 'general-room', name: 'The Grand Hall',
@@ -67,6 +68,11 @@ const server = createServer(async (req, res) => {
       accountsEnabled = true;
       rooms = [room, jewellery, ...['Watch','Art','Design','Dining','Music','Technology','Collectables','Fashion','Motoring','Sport'].map((name,index) => ({ ...room, id: `10000000-0000-0000-0000-0000000000${String(index+20).padStart(2,'0')}`, slug: `${name.toLowerCase()}-room`, name: `The ${name} Room`, display_order: index+20 }))];
     }
+    if (state.signedImageToken) {
+      photoObjects.set('audit.png',{buffer:readFileSync('public/images/auction-house-background.png'),type:'image/png'});
+      images[0].image_url=`http://127.0.0.1:54399/storage/v1/object/sign/lot-photos/audit.png?token=${state.signedImageToken}`;
+    }
+    if (state.accountsEnabled !== undefined) accountsEnabled = state.accountsEnabled;
     if (state.failUpload !== undefined) failUpload = state.failUpload;
     if (state.failUploadAfter !== undefined) uploadsBeforeFailure = state.failUploadAfter;
     if (state.loseSubmitResponse !== undefined) loseSubmitResponse = state.loseSubmitResponse;
@@ -155,12 +161,28 @@ const server = createServer(async (req, res) => {
       }
       next.status = 'PREVIEW'; next.preview_starts_at = new Date().toISOString(); next.ends_at = new Date(Date.now()+30000).toISOString();
     }
+    if(state.photoAuditSecondRoom){
+      const base=lots.find(l=>l.submission_key);const sources=images.filter(i=>i.lot_id===base?.id);
+      const copy={...base,id:randomUUID(),room_id:jewellery.id,title:'Storage audit second room',status:'PREVIEW',ends_at:new Date(Date.now()+3600000).toISOString()};lots.push(copy);
+      for(const source of sources){const imageId=randomUUID(),path=`${accountA}/${copy.id}/${imageId}.png`;const clone={...source,id:imageId,lot_id:copy.id,storage_path:path,thumbnail_path:path+'.thumb.webp',display_path:path+'.display.webp',image_url:'storage:lot-photos/'+path};images.push(clone);for(const key of ['storage_path','thumbnail_path','display_path']){if(photoObjects.has(source[key]))photoObjects.set(clone[key],photoObjects.get(source[key]));}}
+    }
+    if (state.photoAuditLegacy) { for(const image of images){image.thumbnail_path=null;image.display_path=null;}const base=lots.find(l=>l.submission_key);if(base)base.status='PREVIEW'; }
+    if (state.photoAuditDraft) { const base=lots.find(l=>l.submission_key);if(base)base.status='DRAFT'; }
+    if (state.photoAuditCopies) {
+      const base=lots.find(l=>l.submission_key);const sources=images.filter(i=>i.lot_id===base?.id);
+      for(let n=1;n<=state.photoAuditCopies;n++){
+        const copy={...base,id:randomUUID(),title:`Storage audit lot ${n}`,status:n<=2?'SOLD':'WAITING',queue_position:n+1,highest_bidder_id:accountA,sold_at:new Date().toISOString(),winning_bid:100};lots.push(copy);
+        for(const source of sources){const imageId=randomUUID();const path=`${accountA}/${copy.id}/${imageId}.png`;const clone={...source,id:imageId,lot_id:copy.id,storage_path:path,thumbnail_path:path+'.thumb.webp',display_path:path+'.display.webp',image_url:'storage:lot-photos/'+path};images.push(clone);for(const key of ['storage_path','thumbnail_path','display_path']){if(photoObjects.has(source[key]))photoObjects.set(clone[key],photoObjects.get(source[key]));}}
+      }
+      base.status='PREVIEW';base.ends_at=new Date(Date.now()+3600000).toISOString();watchlist=lots.map(lot=>({id:randomUUID(),user_id:accountA,lot_id:lot.id}));
+    }
     if (state.hallEmpty) lots = lots.filter(lot => lot.room_id !== room.id);
     if (state.retireHall) { const hallLot = lots.find(lot => lot.id === id); if (hallLot) hallLot.status = 'SOLD'; }
     if (state.notification) notifications.push({ lot_reference: 1001, ...state.notification, auction_run: new Date().toISOString(), created_at: new Date().toISOString(), read_at: null });
     lots.forEach((lot,index)=>{ if(lot.lot_reference === undefined || (lot.lot_reference === 1001 && lot.id !== id)) lot.lot_reference=1002+index; });
     return reply({ ok: true });
   }
+  if (url.pathname === '/_test/photo-metrics') return reply([...photoObjects].map(([path,object])=>({path,bytes:object.buffer.length,type:object.type})));
   if (url.pathname === '/_test/seller-state') return reply({ lots:lots.length, images:images.length, objects:photoObjects.size });
   if (url.pathname.endsWith('/rpc/completed_auctions_page') || url.pathname.endsWith('/rpc/completed_auctions_page_with_reference')) {
     const account = requestAccount(req), data = await body();
@@ -214,13 +236,14 @@ const server = createServer(async (req, res) => {
       }
       return reply(lot);
     }
-    if (url.pathname.endsWith('/prepare_seller_photo') && lot) {
+    if ((url.pathname.endsWith('/prepare_seller_photo') || url.pathname.endsWith('/prepare_seller_photo_variants')) && lot) {
       let image = images.find(image => image.id === data.p_image_id);
       if (!image) {
         const path = `${account}/${lot.id}/${data.p_image_id}.${data.p_extension}`;
         image = { id: data.p_image_id, lot_id: lot.id, storage_path: path, image_url: `storage:lot-photos/${path}`, sort_order: images.filter(image => image.lot_id === lot.id).length };
         images.push(image);
       }
+      if(url.pathname.endsWith('/prepare_seller_photo_variants')){image.thumbnail_path=image.storage_path+'.thumb.webp';image.display_path=image.storage_path+'.display.webp';}
       return reply(image);
     }
     if (url.pathname.endsWith('/submit_seller_lot') && lot) {
@@ -234,14 +257,20 @@ const server = createServer(async (req, res) => {
     }
     return reply({ message: 'Submission not found' },404);
   }
+  if (url.pathname.endsWith('/rpc/lot_photo_delivery')) {
+    const data=await body();const image=images.find(i=>i.id===data.p_image_id);const lot=lots.find(l=>l.id===image?.lot_id);const room=rooms.find(r=>r.id===lot?.room_id);
+    if(!image?.storage_path||!lot|| (lot.status==='DRAFT'&&lot.seller_id!==account))return reply([]);
+    const path=data.p_size==='thumb'?image.thumbnail_path:data.p_size==='display'?image.display_path:image.storage_path;
+    return reply([{object_path:path??image.storage_path,fallback_path:image.storage_path,public_cache:lot.status!=='DRAFT'&&Boolean(room?.is_active)}]);
+  }
   if (url.pathname === '/storage/v1/object/sign/lot-photos') {
     const data = await body();
     return reply(data.paths.map(path => ({ path, error: photoObjects.has(path) ? null : 'not found', signedURL: photoObjects.has(path) ? `/object/sign/lot-photos/${path}?token=fixture` : null })));
   }
-  if (url.pathname.startsWith('/storage/v1/object/sign/lot-photos/')) {
+  if (url.pathname.startsWith('/storage/v1/object/sign/lot-photos/') || url.pathname.startsWith('/storage/v1/object/authenticated/lot-photos/') || (req.method==='GET'&&url.pathname.startsWith('/storage/v1/object/lot-photos/'))) {
     const stored = photoObjects.get(url.pathname.split('/lot-photos/')[1]);
     if (!stored) return reply({},404);
-    res.setHeader('Content-Type',stored.type); res.writeHead(200); res.end(stored.buffer); return;
+    trace.bytes=stored.buffer.length;res.setHeader('Cache-Control','private, max-age=3600');res.setHeader('Content-Type',stored.type); res.writeHead(200); res.end(stored.buffer); return;
   }
   if (url.pathname.startsWith('/storage/v1/object/info/lot-photos/')) {
     const stored = photoObjects.get(url.pathname.split('/lot-photos/')[1]);

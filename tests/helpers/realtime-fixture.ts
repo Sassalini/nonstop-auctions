@@ -8,7 +8,7 @@ type Channel = { key: string; ref?: string; meta?: { lot_id: string; phx_ref: st
 // installed SDK's join/track/untrack/rejoin and presence-state machinery.
 // Hosted Supabase heartbeat expiry, RLS delivery and load still need staging.
 export class RealtimeFixture {
-  private totals = { joins: 0, leaves: 0, tracks: 0 };
+  private totals = { joins: 0, leaves: 0, tracks: 0, receivedBytes: 0, sentBytes: 0 };
   snapshot() { return { ...this.totals, sockets: this.sockets.size, channels: [...this.sockets.values()].reduce((count, channels) => count + channels.size, 0) }; }
   private sockets = new Map<WebSocketRoute, Map<string, Channel>>();
   private sequence = 0;
@@ -18,6 +18,7 @@ export class RealtimeFixture {
     await context.routeWebSocket(/\/realtime\/v1\/websocket/, socket => {
       this.sockets.set(socket, new Map());
       socket.onMessage(data => {
+        this.totals.receivedBytes += Buffer.byteLength(data.toString());
         const raw = JSON.parse(data.toString());
         this.arrayProtocol.set(socket, Array.isArray(raw));
         const message: Message = Array.isArray(raw)
@@ -30,9 +31,11 @@ export class RealtimeFixture {
   }
 
   private send(socket: WebSocketRoute, message: Message) {
-    socket.send(JSON.stringify(this.arrayProtocol.get(socket)
+    const encoded = JSON.stringify(this.arrayProtocol.get(socket)
       ? [message.join_ref ?? null, message.ref ?? null, message.topic, message.event, message.payload]
-      : message));
+      : message);
+    this.totals.sentBytes += Buffer.byteLength(encoded);
+    socket.send(encoded);
   }
   private receive(socket: WebSocketRoute, message: Message) {
     const channels = this.sockets.get(socket)!;
