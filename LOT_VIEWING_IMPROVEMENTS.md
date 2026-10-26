@@ -40,7 +40,7 @@ Legitimate existing numeric lot_reference values and an owned serial allocator's
 - Browser regression suite: 38 passed, including gallery/catalogue at mobile and desktop sizes, manual selection and Auto-play, queued bidding restrictions, live transitions, notifications, seller flows and existing bounded-read performance assertions.
 - Screenshots inspected at mobile and desktop sizes; automated viewport/clipping checks cover 375, 768 and 1440px gallery layouts and 375/1440px catalogue layouts.
 - Next.js production build: passed.
-- OpenNext/Cloudflare: standard build stops at the installed Next.js 15.5.27 support-policy gate. Local compatibility packaging passed with `npm run build:worker -- --dangerouslyUseUnsupportedNextVersion`, producing `.open-next/worker.js`. OpenNext also warns about Windows support. The override was used only for local verification; dependency upgrades and deployment configuration were not changed. Resolve the support-policy gate before a normal release.
+- OpenNext/Cloudflare: The historical support-policy build gate is resolved by the dependency update documented in [CLOUDFLARE_BUILD_COMPATIBILITY.md](CLOUDFLARE_BUILD_COMPATIBILITY.md). Normal `npm run build:worker` now succeeds without a bypass.
 
 Performance safeguards: catalogue is fetched only when open, 24 cards plus one pagination sentinel, one signed thumbnail per card. Reference search needs one indexed listing lookup, no gallery signing. Completed history retains bounded paging and adds a primary-key reference lookup per returned row. Existing room/detail request-count and history-pagination regression tests pass. No production latency measurements or improvement claims are made in this UI-polish task.
 
