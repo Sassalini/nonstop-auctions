@@ -1,3 +1,4 @@
+import type { DeliveryAddress, FulfilmentOrder, Conversation, PrivateMessage, FulfilmentEvent } from "../transactions";
 export type Json =
   | string
   | number
@@ -107,7 +108,7 @@ export type WatchlistRow = {
   created_at: string;
 };
 
-export type NotificationKind = "WATCHED_LIVE" | "WATCHED_SOLD" | "WATCHED_UNSOLD" | "WON" | "SELLER_LIVE" | "SELLER_SOLD" | "SELLER_FIRST_BID" | "WATCHED_FIRST_BID";
+export type NotificationKind = "NEW_MESSAGE" | "ADDRESS_CONFIRMED" | "DISPATCHED" | "TRACKING_ADDED" | "RECEIPT_CONFIRMED" | "DELIVERY_ISSUE" | "WATCHED_LIVE" | "WATCHED_SOLD" | "WATCHED_UNSOLD" | "WON" | "SELLER_LIVE" | "SELLER_SOLD" | "SELLER_FIRST_BID" | "WATCHED_FIRST_BID";
 export type NotificationRow = {
   lot_reference: number;
   id: string;
@@ -130,6 +131,11 @@ type TableDefinition<Row, Insert, Update> = {
 export type Database = {
   public: {
     Tables: {
+      delivery_addresses: TableDefinition<DeliveryAddress, never, never>;
+      fulfilment_orders: TableDefinition<FulfilmentOrder, never, never>;
+      conversations: TableDefinition<Conversation, never, never>;
+      private_messages: TableDefinition<PrivateMessage, never, never>;
+      fulfilment_events: TableDefinition<FulfilmentEvent, never, never>;
       notifications: TableDefinition<NotificationRow, never, { read_at?: string | null }>;
       profiles: TableDefinition<
         ProfileRow,
@@ -292,6 +298,8 @@ export type Database = {
     };
     Views: Record<string, never>;
     Functions: {
+      unread_message_count: { Args: Record<string, never>; Returns: number };
+      transaction_action: { Args: { action: string; payload?: Json }; Returns: Json };
       completed_auctions_page_with_reference: { Args: { p_mode: "buyer" | "seller"; p_limit?: number; p_offset?: number; p_lot_id?: string }; Returns: { lot_id: string; title: string; sale_price: number; completed_at: string; seller_name: string; buyer_name: string; is_buyer: boolean; image_url: string | null; storage_path: string | null; lot_reference: number }[] };
       save_seller_draft_with_relisting: { Args: { p_submission_key: string; p_room_id: string; p_title: string; p_description: string; p_starting_bid: number; p_relist_unlimited: boolean; p_max_auto_relistings: number }; Returns: LotRow };
       manage_seller_listing: { Args: { p_lot_id: string; p_relist_unlimited?: boolean; p_max_auto_relistings?: number; p_remove?: boolean }; Returns: LotRow };
@@ -338,3 +346,5 @@ export type LotRecord = LotRow;
 export type LotImage = LotImageRow;
 export type Bid = BidRow;
 export type WatchlistItem = WatchlistRow;
+
+

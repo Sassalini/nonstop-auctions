@@ -1,3 +1,4 @@
+import { AppFooter } from "@/components/AppFooter";
 import type { Metadata } from "next";
 import { AppHeader } from "@/components/AppHeader";
 import { LiveAudienceProvider } from "@/components/LiveAudienceProvider";
@@ -19,11 +20,12 @@ export default function RootLayout({
       <body>
         <div aria-hidden="true" className="site-background" />
         <div aria-hidden="true" className="site-background-overlay" />
-        <div className="relative z-10 min-h-screen">
+        <div className="relative z-10 flex min-h-screen flex-col">
           <LiveAudienceProvider>
             <AuctionViewingProvider>
               <AppHeader />
-              {children}
+              <div className="flex-1">{children}</div>
+              <AppFooter />
             </AuctionViewingProvider>
           </LiveAudienceProvider>
         </div>
@@ -31,3 +33,4 @@ export default function RootLayout({
     </html>
   );
 }
+

@@ -40,7 +40,7 @@ export default async function SellPage({ searchParams }: { searchParams: Promise
     }
   } catch (error) { loadError = error instanceof Error ? error.message : "Seller submissions are temporarily unavailable."; }
   return <InteriorShell eyebrow="Sell With Nonstop" title="Sell an Item."
-    description="Please provide item information in as much detail as you can. Submissions that are low quality and could be deemed potentially harmful may be removed. Please see our prohibited items document if you are unsure if your item is allowed to be listed.">
+    description={<>Please provide item information in as much detail as you can. Submissions that are low quality and could be deemed potentially harmful may be removed. Please see our <a href="/policies/prohibited-items-policy.pdf" target="_blank" rel="noopener noreferrer" className="rounded-sm text-auction-gold underline underline-offset-4 hover:text-auction-ivory focus-visible:outline focus-visible:outline-2 focus-visible:outline-auction-gold">prohibited items document<span className="sr-only"> (PDF, opens in a new tab)</span></a> if you are unsure if your item is allowed to be listed.</>}>
     <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_380px]">
       <SellerListingForm key={draft?.id ?? "new"} rooms={rooms} userId={userId} draft={draft} initialPhotos={photos} loadError={loadError} />
       <aside className="space-y-3">
@@ -57,3 +57,4 @@ export default async function SellPage({ searchParams }: { searchParams: Promise
     </div>
   </InteriorShell>;
 }
+

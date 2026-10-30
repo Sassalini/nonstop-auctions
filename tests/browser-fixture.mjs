@@ -64,6 +64,12 @@ const server = createServer(async (req, res) => {
     const chunks = []; for await (const chunk of req) chunks.push(chunk);
     const state = JSON.parse(Buffer.concat(chunks).toString() || '{}');
     if (state.mode === 'empty') { lots = []; images = []; rooms = [room]; accountsEnabled = false; notifications = []; watchlist = []; photoObjects = new Map(); failUpload = false; uploadsBeforeFailure = null; loseSubmitResponse = false; }
+    if (state.mode === 'transactions') {
+      accountsEnabled=true;rooms=[room];lots=[{...createLot('SOLD'),seller_id:accountB,highest_bidder_id:accountA,winning_bid:275,sold_at:new Date().toISOString()}];
+      addressRows=[];messageRows=[];eventRows=[];
+      orderRows=[{id:'50000000-0000-0000-0000-000000000001',lot_id:id,buyer_id:accountA,seller_id:accountB,preview_started_at:new Date().toISOString(),created_at:new Date().toISOString(),version:0,payment_state:'NOT_RECORDED',shipping_state:'AWAITING_ADDRESS',address_snapshot:null,service:'',tracking:'',delivery_notes:'',dispatched_at:null,buyer_received_at:null,seller_delivery_reported_at:null}];
+      conversationRows=[{id:'60000000-0000-0000-0000-000000000001',lot_id:id,buyer_id:accountA,seller_id:accountB,created_at:new Date().toISOString(),buyer_read_at:new Date().toISOString(),seller_read_at:new Date().toISOString()}];
+    }
     if (state.mode === 'seller') {
       accountsEnabled = true;
       rooms = [room, jewellery, ...['Watch','Art','Design','Dining','Music','Technology','Collectables','Fashion','Motoring','Sport'].map((name,index) => ({ ...room, id: `10000000-0000-0000-0000-0000000000${String(index+20).padStart(2,'0')}`, slug: `${name.toLowerCase()}-room`, name: `The ${name} Room`, display_order: index+20 }))];
@@ -196,6 +202,18 @@ const server = createServer(async (req, res) => {
       return {lot_reference:lot.lot_reference,lot_id:lot.id,title:lot.title,sale_price:lot.winning_bid,completed_at:lot.sold_at,seller_name:'History Seller',buyer_name:'History Buyer',is_buyer:lot.highest_bidder_id===account,image_url:photo?.image_url??null,storage_path:photo?.storage_path??null};
     }));
   }
+  if(url.pathname.endsWith('/rpc/unread_message_count'))return reply(0);
+  if(url.pathname.endsWith('/rpc/transaction_action')){
+    const account=requestAccount(req),{action,payload:p}=await body();if(!account)return reply({message:'Sign in required'},403);
+    if(action==='save_address'){const aid=p.id||randomUUID();addressRows=addressRows.filter(a=>a.id!==aid);addressRows.push({id:aid,user_id:account,details:p.details,is_default:p.default,created_at:new Date().toISOString()});return reply(aid);}
+    if(action==='delete_address'){addressRows=addressRows.filter(a=>a.id!==p.id||a.user_id!==account);return reply(true);}
+    if(action==='conversation')return reply(conversationRows[0].id);
+    if(action==='send'){const mid=randomUUID();messageRows.push({id:mid,conversation_id:p.conversation,sender_id:account,body:p.body,client_key:p.key,created_at:new Date().toISOString(),deleted_at:null});return reply(mid);}
+    if(action==='shipping'){const o=orderRows.find(o=>o.id===p.order&&o.seller_id===account);if(!o)return reply({message:'Unavailable'},403);Object.assign(o,{shipping_state:p.state,service:p.service,tracking:p.tracking,delivery_notes:p.notes,dispatched_at:new Date().toISOString(),version:o.version+1});return reply(true);}
+    if(action==='receipt'){const o=orderRows.find(o=>o.id===p.order&&o.buyer_id===account);if(!o)return reply({message:'Unavailable'},403);Object.assign(o,{shipping_state:'DELIVERED',buyer_received_at:new Date().toISOString(),version:o.version+1});return reply(true);}
+    if(action==='select_address'){const o=orderRows.find(o=>o.id===p.order&&o.buyer_id===account);const a=addressRows.find(a=>a.id===p.address&&a.user_id===account);if(!o||!a)return reply({message:'Unavailable'},403);o.address_snapshot=structuredClone(a.details);o.shipping_state='AWAITING_DISPATCH';o.version++;return reply(true);}
+    return reply(true);
+  }
   if (url.pathname.endsWith('/rpc/my_completed_auctions')) {
     const account = requestAccount(req);
     return reply(lots.filter(lot => lot.status === 'SOLD' && account && (lot.seller_id === account || lot.highest_bidder_id === account)).map(lot => ({ lot_id: lot.id, sale_price: lot.winning_bid, completed_at: lot.sold_at, seller_name: 'History Seller', buyer_name: 'History Buyer', is_buyer: lot.highest_bidder_id === account })));
@@ -292,7 +310,7 @@ const server = createServer(async (req, res) => {
   let rows = url.pathname.endsWith('/auction_rooms') ? rooms
     : url.pathname.endsWith('/lots') ? lots.filter(lot => lot.status !== 'DRAFT' || lot.seller_id === account) : url.pathname.endsWith('/lot_images') ? images
     : url.pathname.endsWith('/notifications') ? notifications.filter(item => item.user_id === account)
-    : url.pathname.endsWith('/watchlist') ? watchlist.filter(item => item.user_id === account) : [];
+    : url.pathname.endsWith('/delivery_addresses') ? addressRows.filter(a=>a.user_id===account) : url.pathname.endsWith('/fulfilment_orders') ? orderRows.filter(o=>[o.buyer_id,o.seller_id].includes(account)) : url.pathname.endsWith('/conversations') ? conversationRows.filter(c=>[c.buyer_id,c.seller_id].includes(account)) : url.pathname.endsWith('/private_messages') ? messageRows.filter(m=>conversationRows.some(c=>c.id===m.conversation_id&&[c.buyer_id,c.seller_id].includes(account))) : url.pathname.endsWith('/fulfilment_events') ? eventRows : url.pathname.endsWith('/watchlist') ? watchlist.filter(item => item.user_id === account) : [];
   for (const [column, filter] of url.searchParams) {
     if (filter.startsWith('eq.')) rows = rows.filter(row => String(row[column]) === filter.slice(3));
     if (filter.startsWith('neq.')) rows = rows.filter(row => String(row[column]) !== filter.slice(4));
@@ -333,3 +351,6 @@ const child = spawn(process.execPath, ['node_modules/next/dist/bin/next', proces
 const stop = () => { child.kill(); server.close(); };
 process.on('SIGTERM', stop); process.on('SIGINT', stop);
 child.on('exit', code => { server.close(); process.exitCode = code ?? 0; });
+let addressRows=[],orderRows=[],conversationRows=[],messageRows=[],eventRows=[];
+
+

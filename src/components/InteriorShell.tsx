@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 type InteriorShellProps = {
   eyebrow: string;
   title: string;
-  description: string;
+  description: ReactNode;
   children: ReactNode;
 };
 
@@ -23,3 +23,4 @@ export function InteriorShell({ eyebrow, title, description, children }: Interio
     </main>
   );
 }
+

@@ -10,7 +10,7 @@ export async function CompletedAuctions({ mode, history: prepared }: { mode: "bu
  const anchor = mode === "buyer" ? "won-auctions" : "sold-auctions";
  return <section id={anchor} className="mb-5 rounded-lg border border-white/10 bg-auction-panel/90 p-5">
   <h2 className="text-lg font-semibold text-auction-ivory">{mode === "buyer" ? "Won Auctions" : "Sold Auctions"}</h2>
-  <p className="mt-2 text-sm text-auction-muted">{mode === "buyer" ? "Auction won" : "Sale completed"} · Payment not recorded · Fulfilment not recorded · Delivery not recorded</p>
+  <p className="mt-2 text-sm text-auction-muted">{mode === "buyer" ? "Auction won" : "Sale completed"} · Payment not recorded · Open order details for delivery management</p>
   {!records.length ? <p className="mt-4 text-sm text-auction-muted">No completed auctions yet.</p> : null}
   <div className="divide-y divide-white/10">{records.map(record => <article id={record.lot_id} key={record.lot_id} className="flex flex-wrap gap-4 py-5">
     <Image src={record.image_url || "/images/auction-house-background.png"} alt={record.title} width={112} height={84} className="h-20 w-28 rounded-md object-cover" />
@@ -18,6 +18,7 @@ export async function CompletedAuctions({ mode, history: prepared }: { mode: "bu
      {mode === "buyer" ? <p className="mt-1 text-sm text-auction-ivory">You won this auction.</p> : null}
      <p className="mt-1 text-sm text-auction-ivory">Sold for: {formatCurrency(Number(record.sale_price))}</p>
      <p className="mt-1 text-sm text-auction-muted">{mode === "buyer" ? `Seller: ${record.seller_name}` : `Winning bidder: ${record.buyer_name}`}</p>
+     <Link prefetch={false} href={`/orders/${record.lot_id}`} className="my-2 block text-sm text-auction-gold underline">Order details / delivery tracking</Link>
      <time className="text-sm text-auction-muted" dateTime={record.completed_at}>{new Date(record.completed_at).toLocaleString("en-GB", { timeZone: "Europe/London" })}</time>
     </div>
    </article>)}</div>
@@ -30,3 +31,4 @@ export async function CompletedAuctions({ mode, history: prepared }: { mode: "bu
   </nav> : null}
  </section>;
 }
+

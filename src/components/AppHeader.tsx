@@ -10,7 +10,7 @@ const navItems = [
   { href: "/my-auctions", label: "My Auctions" },
 ];
 
-function AuctionLogoMark() {
+export function AuctionLogoMark() {
   return (
     <svg
       aria-hidden="true"
@@ -99,3 +99,4 @@ export function AppHeader() {
     </header>
   );
 }
+

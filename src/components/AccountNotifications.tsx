@@ -7,6 +7,12 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { NotificationKind, NotificationRow } from "@/lib/supabase/types";
 
 const messages: Record<NotificationKind, string> = {
+ NEW_MESSAGE: "New private message",
+ ADDRESS_CONFIRMED: "Buyer confirmed the delivery address",
+ DISPATCHED: "Seller dispatched your item",
+ TRACKING_ADDED: "Tracking information updated",
+ RECEIPT_CONFIRMED: "Buyer confirmed receipt",
+ DELIVERY_ISSUE: "A delivery issue was reported",
   WATCHED_LIVE: "A watched lot is now open for bidding",
   WATCHED_SOLD: "A watched lot has sold",
   WATCHED_UNSOLD: "A watched lot ended unsold",
@@ -152,7 +158,7 @@ export function AccountNotifications() {
         {!items.length && !error ? <p className="text-sm text-auction-muted">No notifications yet.</p> : null}
         <ul className="divide-y divide-white/10">
           {items.map((item) => <li key={item.id} className={`flex gap-2 py-3 ${item.read_at ? "opacity-70" : ""}`}>
-            <Link href={item.kind === "WON" ? `/won-auctions?lot=${item.lot_id}#${item.lot_id}` : item.kind === "SELLER_SOLD" ? `/my-auctions?lot=${item.lot_id}#${item.lot_id}` : `/lots/${item.lot_id}?view=manual`} prefetch={false} onClick={() => { setOpen(false); if (!item.read_at) void markRead(item.id); }} className="min-w-0 flex-1 rounded-sm focus-visible:outline-auction-gold">
+            <Link href={item.kind === "NEW_MESSAGE" ? "/messages" : ["ADDRESS_CONFIRMED","DISPATCHED","TRACKING_ADDED","RECEIPT_CONFIRMED","DELIVERY_ISSUE"].includes(item.kind) ? `/orders/${item.lot_id}` : item.kind === "WON" ? `/won-auctions?lot=${item.lot_id}#${item.lot_id}` : item.kind === "SELLER_SOLD" ? `/my-auctions?lot=${item.lot_id}#${item.lot_id}` : `/lots/${item.lot_id}?view=manual`} prefetch={false} onClick={() => { setOpen(false); if (!item.read_at) void markRead(item.id); }} className="min-w-0 flex-1 rounded-sm focus-visible:outline-auction-gold">
               <p className={`text-sm ${item.read_at ? "text-auction-ivory" : "text-auction-gold"}`}>{messages[item.kind]}</p>
               <p className="mt-1 text-xs text-auction-muted">Lot {item.lot_reference}</p>
               <p className="mt-1 break-words text-xs text-auction-muted">{item.lot_title}</p>
@@ -166,3 +172,4 @@ export function AccountNotifications() {
     </section> : null}
   </div>;
 }
+

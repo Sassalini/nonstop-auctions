@@ -207,3 +207,73 @@ test('database uniqueness prevents a second current lot in a room', () => fixtur
 test('the repository SQL integration scenario passes after release migration', async () => {
   await db.exec(await readFile(new URL('../supabase/tests/auction_lifecycle_integration.sql', import.meta.url), 'utf8'));
 });
+async function transaction(user, action, payload={}) {
+ return asUser(user, async()=> (await db.query('select public.transaction_action($1,$2::jsonb) as result',[action,JSON.stringify(payload)])).rows[0].result);
+}
+const delivery={recipient:'Buyer Name',line1:'10 Example Road',line2:'',city:'London',region:'',postcode:'SW1A 1AA',country:'United Kingdom',instructions:''};
+async function soldOrder(){await openFirstWindow();await asUser(bidder,()=>db.query('select public.place_bid($1,$2)',[first,275]));await expire();await db.query('select public.advance_room_lifecycle($1)',[room]);return (await db.query('select * from public.fulfilment_orders where lot_id=$1',[first])).rows[0];}
+test('private messaging verifies participants, deduplicates, notifies, blocks and rate limits',()=>fixture(async()=>{
+ const cid=await transaction(bidder,'conversation',{lot:first});
+ assert.equal(await transaction(bidder,'conversation',{lot:first}),cid);
+ const key='30000000-0000-0000-0000-000000000001';
+ const mid=await transaction(bidder,'send',{conversation:cid,body:'Is collection possible?',key});
+ assert.equal(await transaction(bidder,'send',{conversation:cid,body:'retry',key}),mid);
+ assert.equal((await db.query("select count(*)::int n from public.notifications where kind='NEW_MESSAGE' and user_id=$1",[seller])).rows[0].n,1);
+ assert.equal((await asUser(other,()=>db.query('select * from public.private_messages'))).rows.length,0);
+ assert.equal((await asUser(other,()=>db.query('select * from public.conversations'))).rows.length,0);
+ await assert.rejects(transaction(other,'send',{conversation:cid,body:'intrusion',key:'30000000-0000-0000-0000-000000000002'}),/unavailable/);
+ await assert.rejects(transaction(bidder,'send',{conversation:cid,body:'x'.repeat(2001),key}),/2000/);
+ assert.equal(Number((await asUser(seller,()=>db.query('select public.unread_message_count() n'))).rows[0].n),1);
+ await transaction(seller,'read',{conversation:cid});
+ assert.equal(Number((await asUser(seller,()=>db.query('select public.unread_message_count() n'))).rows[0].n),0);
+ await transaction(seller,'report_message',{conversation:cid,message:mid,reason:'Review this message'});
+ await assert.rejects(transaction(bidder,'delete_message',{conversation:cid,message:mid}),/retained/);
+ await transaction(seller,'block',{conversation:cid});
+ await assert.rejects(transaction(bidder,'send',{conversation:cid,body:'blocked',key:'30000000-0000-0000-0000-000000000003'}),/blocked/);
+ await transaction(seller,'unblock',{conversation:cid});
+ for(let i=2;i<=10;i++)await transaction(bidder,'send',{conversation:cid,body:'Question '+i,key:`30000000-0000-0000-0000-${String(i).padStart(12,'0')}`});
+ await assert.rejects(transaction(bidder,'send',{conversation:cid,body:'too many',key:'30000000-0000-0000-0000-000000000011'}),/limit/);
+}));
+test('sold results create one private order; address snapshots and state transitions protect fulfilment',()=>fixture(async()=>{
+ const o=await soldOrder();assert.equal(o.buyer_id,bidder);assert.equal(o.seller_id,seller);assert.equal(o.payment_state,'NOT_RECORDED');
+ assert.equal((await db.query('select count(*)::int n from public.fulfilment_orders where lot_id=$1',[first])).rows[0].n,1);
+ const aid=await transaction(bidder,'save_address',{details:delivery,default:true});
+ assert.equal((await asUser(seller,()=>db.query('select * from public.delivery_addresses'))).rows.length,0);
+ assert.equal((await asUser(other,()=>db.query('select * from public.fulfilment_orders'))).rows.length,0);
+ await assert.rejects(transaction(other,'select_address',{order:o.id,version:0,address:aid}),/unavailable/);
+ await transaction(bidder,'select_address',{order:o.id,version:0,address:aid});
+ await transaction(bidder,'save_address',{id:aid,details:{...delivery,line1:'New address'},default:true});
+ const snapshot=(await asUser(seller,()=>db.query('select address_snapshot from public.fulfilment_orders where id=$1',[o.id]))).rows[0].address_snapshot;
+ assert.equal(snapshot.line1,delivery.line1);
+ await assert.rejects(transaction(bidder,'shipping',{order:o.id,version:1,state:'DISPATCHED'}),/not allowed/);
+ await transaction(seller,'shipping',{order:o.id,version:1,state:'DISPATCHED',service:'Royal Mail',tracking:'ABC123',notes:'Posted'});
+ await assert.rejects(transaction(seller,'shipping',{order:o.id,version:1,state:'DISPATCHED'}),/changed/);
+ await assert.rejects(transaction(bidder,'select_address',{order:o.id,version:2,address:aid}),/cannot be changed/);
+ await transaction(seller,'seller_delivery_report',{order:o.id,version:2});
+ assert.equal((await db.query('select shipping_state from public.fulfilment_orders where id=$1',[o.id])).rows[0].shipping_state,'DISPATCHED');
+ await assert.rejects(transaction(seller,'receipt',{order:o.id,version:3}),/cannot/);
+ await transaction(bidder,'receipt',{order:o.id,version:3});
+ await transaction(bidder,'report_order',{order:o.id,reason:'Delivery issue'});await transaction(bidder,'report_order',{order:o.id,reason:'retry'});
+ assert.equal((await db.query('select count(*)::int n from public.transaction_reports where order_id=$1',[o.id])).rows[0].n,1);
+ const final=(await db.query('select * from public.fulfilment_orders where id=$1',[o.id])).rows[0];assert.equal(final.shipping_state,'DELIVERED');assert.equal(final.payment_state,'NOT_RECORDED');
+ assert.equal((await db.query('select count(*)::int n from public.fulfilment_events where order_id=$1',[o.id])).rows[0].n,5);
+ await transaction(bidder,'delete_address',{id:aid});assert.ok(final.address_snapshot);
+ assert.equal(Number((await row()).winning_bid),275);
+ await assert.rejects(asUser(other,()=>db.query("update public.fulfilment_orders set shipping_state='DELIVERED'")),/permission denied/);
+}));
+test('blocking preserves active order communication but does not expose other address books',()=>fixture(async()=>{
+ await soldOrder();const cid=await transaction(bidder,'conversation',{lot:first});await transaction(seller,'block',{conversation:cid});
+ await transaction(bidder,'send',{conversation:cid,body:'Please arrange delivery',key:'40000000-0000-0000-0000-000000000001'});
+ const aid=await transaction(other,'save_address',{details:delivery,default:true});
+ await assert.rejects(transaction(bidder,'save_address',{id:aid,details:delivery}),/unavailable/);
+ await assert.rejects(transaction(bidder,'save_address',{details:{...delivery,recipient:''}}),/required/);
+}));
+test('retention purges only old nontransaction, unreported messages and denies client execution',()=>fixture(async()=>{
+ const cid=await transaction(bidder,'conversation',{lot:first});
+ const mid=await transaction(bidder,'send',{conversation:cid,body:'Old question',key:'70000000-0000-0000-0000-000000000001'});
+ await db.query("update public.private_messages set created_at=now()-interval '1 year' where id=$1",[mid]);
+ await assert.rejects(asUser(bidder,()=>db.query("select public.purge_nontransaction_messages(now()-interval '60 days')")),/permission denied/);
+ await db.query("select public.purge_nontransaction_messages(now()-interval '60 days')");
+ assert.equal((await db.query('select * from public.private_messages where id=$1',[mid])).rows.length,0);
+}));
+
