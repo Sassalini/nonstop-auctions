@@ -268,6 +268,25 @@ test('blocking preserves active order communication but does not expose other ad
  await assert.rejects(transaction(bidder,'save_address',{id:aid,details:delivery}),/unavailable/);
  await assert.rejects(transaction(bidder,'save_address',{details:{...delivery,recipient:''}}),/required/);
 }));
+test('saved addresses support multiple entries, exclusive defaults and private owner-only edits/deletes',()=>fixture(async()=>{
+ const a=await transaction(bidder,'save_address',{details:delivery,default:true});
+ const b=await transaction(bidder,'save_address',{details:{...delivery,recipient:'Second recipient'},default:false});
+ const rows=()=>asUser(bidder,()=>db.query('select * from public.delivery_addresses order by created_at,id'));
+ assert.equal((await rows()).rows.length,2);
+ await transaction(bidder,'save_address',{id:b,details:{...delivery,recipient:'Updated recipient'},default:true});
+ let saved=(await rows()).rows;
+ assert.deepEqual(saved.filter(a=>a.is_default).map(a=>a.id),[b]);
+ assert.equal(saved.find(a=>a.id===b).details.recipient,'Updated recipient');
+ await assert.rejects(transaction(other,'save_address',{id:b,details:delivery,default:true}),/unavailable/);
+ await transaction(other,'delete_address',{id:b});
+ assert.equal((await rows()).rows.length,2);
+ assert.equal((await asUser(other,()=>db.query('select * from public.delivery_addresses where id=$1',[b]))).rows.length,0);
+ await assert.rejects(asUser(other,()=>db.query('update public.delivery_addresses set is_default=false where id=$1',[b])),/permission denied/);
+ await assert.rejects(asUser(other,()=>db.query('delete from public.delivery_addresses where id=$1',[b])),/permission denied/);
+ await transaction(bidder,'delete_address',{id:a});
+ saved=(await rows()).rows;assert.equal(saved.length,1);assert.equal(saved[0].id,b);
+}));
+
 test('retention purges only old nontransaction, unreported messages and denies client execution',()=>fixture(async()=>{
  const cid=await transaction(bidder,'conversation',{lot:first});
  const mid=await transaction(bidder,'send',{conversation:cid,body:'Old question',key:'70000000-0000-0000-0000-000000000001'});

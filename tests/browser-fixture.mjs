@@ -205,7 +205,13 @@ const server = createServer(async (req, res) => {
   if(url.pathname.endsWith('/rpc/unread_message_count'))return reply(0);
   if(url.pathname.endsWith('/rpc/transaction_action')){
     const account=requestAccount(req),{action,payload:p}=await body();if(!account)return reply({message:'Sign in required'},403);
-    if(action==='save_address'){const aid=p.id||randomUUID();addressRows=addressRows.filter(a=>a.id!==aid);addressRows.push({id:aid,user_id:account,details:p.details,is_default:p.default,created_at:new Date().toISOString()});return reply(aid);}
+    if(action==='save_address'){
+      const aid=p.id||randomUUID(),existing=addressRows.find(a=>a.id===aid);
+      if(existing&&existing.user_id!==account)return reply({message:'Address unavailable'},403);
+      if(p.default)addressRows.filter(a=>a.user_id===account).forEach(a=>{a.is_default=false;});
+      addressRows=addressRows.filter(a=>a.id!==aid);
+      addressRows.push({id:aid,user_id:account,details:p.details,is_default:!!p.default,created_at:existing?.created_at??new Date().toISOString()});return reply(aid);
+    }
     if(action==='delete_address'){addressRows=addressRows.filter(a=>a.id!==p.id||a.user_id!==account);return reply(true);}
     if(action==='conversation')return reply(conversationRows[0].id);
     if(action==='send'){const mid=randomUUID();messageRows.push({id:mid,conversation_id:p.conversation,sender_id:account,body:p.body,client_key:p.key,created_at:new Date().toISOString(),deleted_at:null});return reply(mid);}

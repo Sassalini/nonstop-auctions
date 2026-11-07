@@ -12,6 +12,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { formatShortDateTime, getLotStatusLabel } from "@/lib/auction-lifecycle";
 import { CompletedAuctions } from "@/components/CompletedAuctions";
 import { SellerDraftActions } from "@/components/SellerDraftActions";
+import { AccountNavigation } from "@/components/AccountNavigation";
 
 export const dynamic = "force-dynamic";
 
@@ -40,7 +41,7 @@ export default async function MyAuctionsPage({ searchParams }: { searchParams: P
       title="Track bids, watched lots, and seller activity."
       description="Your watched lots and bid activity, together in one place."
     >
-      <nav className="mb-5 flex flex-wrap gap-5 text-auction-gold"><Link prefetch={false} href="/won-auctions">Won Auctions</Link><a href="#sold-auctions">Sold Auctions</a></nav>
+      <AccountNavigation current="sold" />
       <CompletedAuctions mode="seller" history={history} />
       {submitted ? <p role="status" className="mb-5 rounded-lg border border-auction-gold/30 bg-auction-panel/90 p-4 text-sm text-auction-gold">Listing submitted successfully to the auction room queue.</p> : null}
       <section className="mb-5 rounded-lg border border-white/10 bg-auction-panel/90 p-5 shadow-glow">

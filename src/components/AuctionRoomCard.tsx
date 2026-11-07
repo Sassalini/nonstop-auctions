@@ -31,7 +31,6 @@ export function AuctionRoomCard({
           : "border-white/10 hover:border-auction-gold/45"
       }`}
     >
-      <div className="relative overflow-hidden p-4">
       <Image
         src={room.imageUrl}
         alt=""
@@ -42,7 +41,8 @@ export function AuctionRoomCard({
         }`}
       />
       <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/45 to-black/25" />
-      <div className="absolute inset-0 bg-gradient-to-b from-black/5 via-transparent to-black/65" />
+      <div className="absolute inset-0 bg-gradient-to-b from-black/5 via-transparent to-black/40" />
+      <div className="relative overflow-hidden p-4">
       <div className="relative flex h-full min-h-[118px] flex-col justify-between">
         <div>
           <h3 className="font-serif text-xl text-auction-ivory">{room.name}</h3>
@@ -77,7 +77,7 @@ export function AuctionRoomCard({
         </div>
       </div>
       </div>
-      <div data-testid="room-status-footer" className="relative flex min-h-10 flex-wrap items-center justify-between gap-2 border-t border-white/10 bg-auction-black px-3 py-2">
+      <div data-testid="room-status-footer" className="relative flex min-h-10 flex-wrap items-center justify-between gap-2 border-t border-white/10 bg-black/15 px-3 py-2 backdrop-blur-[2px]">
         <AuctionStatusBadge status={getLotBadgeVariant(status)} label={getLotCompactStatusLabel(status)} />
         <ArrowRight size={18} strokeWidth={1.8} className="shrink-0 text-auction-gold" aria-hidden="true" />
       </div>
