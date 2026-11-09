@@ -1,4 +1,4 @@
-import type { DeliveryAddress, FulfilmentOrder, Conversation, PrivateMessage, FulfilmentEvent } from "../transactions";
+import type { DeliveryAddress, FulfilmentOrder, Conversation, PrivateMessage, FulfilmentEvent, FulfilmentTerms, StripeCheckoutAttempt } from "../transactions";
 export type Json =
   | string
   | number
@@ -108,7 +108,9 @@ export type WatchlistRow = {
   created_at: string;
 };
 
-export type NotificationKind = "NEW_MESSAGE" | "ADDRESS_CONFIRMED" | "DISPATCHED" | "TRACKING_ADDED" | "RECEIPT_CONFIRMED" | "DELIVERY_ISSUE" | "WATCHED_LIVE" | "WATCHED_SOLD" | "WATCHED_UNSOLD" | "WON" | "SELLER_LIVE" | "SELLER_SOLD" | "SELLER_FIRST_BID" | "WATCHED_FIRST_BID";
+export type NotificationKind = "NEW_MESSAGE" | "ADDRESS_CONFIRMED" | "DISPATCHED" | "TRACKING_ADDED" | "RECEIPT_CONFIRMED" | "DELIVERY_ISSUE" | "WATCHED_LIVE" | "WATCHED_SOLD" | "WATCHED_UNSOLD" | "WON" | "SELLER_LIVE" | "SELLER_SOLD" | "SELLER_FIRST_BID" | "WATCHED_FIRST_BID"
+ | "WON_PAYMENT_REQUIRED" | "PAYMENT_CONFIRMED" | "ORDER_PAID" | "PAYMENT_FAILED" | "PAYMENT_REFUNDED" | "PAYMENT_REFUND_FAILED" | "PAYMENT_DISPUTED" | "PAYMENT_DISPUTE_RESOLVED"
+ | "COLLECTION_READY" | "COLLECTION_UPDATED" | "COLLECTION_HANDOVER" | "COLLECTION_CONFIRMED";
 export type NotificationRow = {
   lot_reference: number;
   id: string;
@@ -133,6 +135,10 @@ export type Database = {
     Tables: {
       delivery_addresses: TableDefinition<DeliveryAddress, never, never>;
       fulfilment_orders: TableDefinition<FulfilmentOrder, never, never>;
+      listing_fulfilment_terms: TableDefinition<{ lot_id: string; details: FulfilmentTerms }, never, never>;
+      seller_stripe_test_accounts: TableDefinition<{ seller_id: string; stripe_account: string }, never, never>;
+      stripe_checkout_attempts: TableDefinition<StripeCheckoutAttempt, never, never>;
+      stripe_payment_events: TableDefinition<{ id: string; attempt_id: string; kind: string; processed_at: string }, never, never>;
       conversations: TableDefinition<Conversation, never, never>;
       private_messages: TableDefinition<PrivateMessage, never, never>;
       fulfilment_events: TableDefinition<FulfilmentEvent, never, never>;
@@ -311,6 +317,10 @@ export type Database = {
       prepare_seller_photo: { Args: { p_lot_id: string; p_image_id: string; p_extension: string }; Returns: LotImageRow };
       remove_seller_photo: { Args: { p_image_id: string }; Returns: undefined };
       submit_seller_lot: { Args: { p_lot_id: string }; Returns: LotRow };
+      set_listing_fulfilment: { Args: { p_lot: string; p_terms: Json }; Returns: undefined };
+      reserve_test_checkout: { Args: { p_buyer: string; p_order: string; p_method: string | null; p_address: string | null; p_account: string }; Returns: StripeCheckoutAttempt };
+      bind_test_checkout: { Args: { p_attempt: string; p_session: string }; Returns: boolean };
+      record_test_payment: { Args: { p_event: string; p_attempt: string; p_account: string; p_session: string; p_intent: string | null; p_total: number; p_kind: string; p_refund_amount?: number; p_adjustment?: string; p_adjustment_status?: string }; Returns: undefined };
       discard_seller_draft: { Args: { p_lot_id: string }; Returns: undefined };
       lot_watchlist_count: { Args: { p_lot_id: string }; Returns: number };
       auction_server_time: { Args: Record<string, never>; Returns: string };

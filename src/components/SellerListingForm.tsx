@@ -8,14 +8,16 @@ import { Upload, X } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { createPhotoVariants } from "@/lib/photo-variants";
 import { RelistingControls } from "@/components/RelistingControls";
+import { ListingFulfilmentFields, readListingFulfilment } from "@/components/ListingFulfilmentFields";
 import { parseRelistingLimit, MAX_PHOTOS, PHOTO_BUCKET, parseStartingBid, photoExtensions, validatePhoto } from "@/lib/seller-validation";
 import type { AuctionRoomRow, LotImageRow, LotRow } from "@/lib/supabase/types";
+import type { FulfilmentTerms } from "@/lib/transactions";
 
 type Photo = { id: string; url: string; file?: File; path?: string; thumbnailPath?: string; displayPath?: string; variants?: { thumb: Blob; display: Blob }; uploaded: boolean };
 const fieldClass = "w-full rounded-md border border-white/10 bg-black/35 px-3 text-sm text-auction-ivory outline-none transition focus:border-auction-gold disabled:opacity-50";
 
-export function SellerListingForm({ rooms, userId, draft, initialPhotos, loadError }: {
-  rooms: AuctionRoomRow[]; userId: string | null; draft: LotRow | null; initialPhotos: LotImageRow[]; loadError: string;
+export function SellerListingForm({ rooms, userId, draft, terms, initialPhotos, loadError }: {
+  rooms: AuctionRoomRow[]; userId: string | null; draft: LotRow | null; terms: FulfilmentTerms | null; initialPhotos: LotImageRow[]; loadError: string;
 }) {
   const router = useRouter();
   const [title, setTitle] = useState(draft?.title ?? "");
@@ -68,7 +70,7 @@ export function SellerListingForm({ rooms, userId, draft, initialPhotos, loadErr
     finally { working.current = false; setBusy(false); }
   }
 
-  async function submit(event: FormEvent) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (working.current) return;
     const amount = parseStartingBid(startingBid);
@@ -78,8 +80,10 @@ export function SellerListingForm({ rooms, userId, draft, initialPhotos, loadErr
     if (!title.trim() || !description.trim() || !rooms.some(room => room.id === roomId)) { setMessage("Enter a title, item description and active auction room."); return; }
     if (amount === null) { setMessage("Enter a positive starting bid in GBP with no more than two decimal places."); return; }
     if (!photos.length || photos.some(photo => !photo.uploaded && !photo.file)) { setMessage("Add at least one photo. Remove and reselect any interrupted uploads."); return; }
+    const fields = new FormData(event.currentTarget);
     working.current = true; setBusy(true); setMessage("Saving your listing…");
     try {
+      const terms = readListingFulfilment(fields);
       const client = createSupabaseBrowserClient();
       const { data: { user } } = await client.auth.getUser();
       if (!user || user.id !== userId) throw new Error("Your session changed. Sign in and reopen your draft from My Auctions.");
@@ -91,6 +95,8 @@ export function SellerListingForm({ rooms, userId, draft, initialPhotos, loadErr
       if (saved.error) throw saved.error;
       lotRef.current = saved.data;
       if (saved.data.status === "DRAFT") {
+        const fulfilment = await client.rpc("set_listing_fulfilment", { p_lot: saved.data.id, p_terms: terms });
+        if (fulfilment.error) throw fulfilment.error;
         for (const photo of photos) {
           const extension = photo.file ? photoExtensions[photo.file.type] : photo.path?.split(".").at(-1);
           if (!extension) throw new Error("Remove and reselect the interrupted photo.");
@@ -159,6 +165,7 @@ export function SellerListingForm({ rooms, userId, draft, initialPhotos, loadErr
         <p id="starting-bid-help" className="self-center text-xs leading-5 text-auction-muted">Enter pounds and pence, for example 25.50. Auctions have no reserve. Later bids use the existing £50 minimum increment.</p>
       </div>
       <RelistingControls prefix="seller-new" limit={relistingLimit} unlimited={unlimited} onLimit={setRelistingLimit} onUnlimited={setUnlimited} />
+      <ListingFulfilmentFields terms={terms} fieldClass={fieldClass} />
       <label className="mt-5 block space-y-2"><span id="seller-description-label" className="text-sm font-medium text-auction-ivory">Item Description</span><span id="item-description-help" className="block text-xs leading-5 text-auction-muted">Please add in as much detail all relevant details about the item including: Condition, Age, History, Dimensions and measurements, Maker information, Known repairs.</span>
         <textarea aria-labelledby="seller-description-label" required maxLength={10000} rows={5} value={description} onChange={event => setDescription(event.target.value)} aria-describedby="item-description-help" className={`${fieldClass} resize-y py-3`} />
       </label>

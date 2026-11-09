@@ -15,10 +15,21 @@ for(const mode of ['zero','five','unlimited'])test(`seller form persists ${mode}
  await limit.fill('101');expect(await limit.evaluate((el:HTMLInputElement)=>el.validity.rangeOverflow)).toBe(true);
  await limit.fill('1.5');expect(await limit.evaluate((el:HTMLInputElement)=>el.validity.stepMismatch)).toBe(true);
  await limit.fill(mode==='zero'?'0':'5');if(mode==='unlimited'){await unlimited.check();await expect(limit).toBeDisabled();await unlimited.uncheck();await expect(limit).toBeEnabled();await unlimited.check();}
- await page.getByLabel('Item title',{exact:true}).fill(`Relisting ${mode}`);await page.getByLabel('Auction room',{exact:true}).selectOption(hall);await page.getByLabel('Starting bid (GBP)',{exact:true}).fill('25.50');await page.locator('textarea').fill('Detailed listing description');
+ await page.getByLabel('Item title',{exact:true}).fill(`Relisting ${mode}`);await page.getByLabel('Auction room',{exact:true}).selectOption(hall);await page.getByLabel('Starting bid (GBP)',{exact:true}).fill('25.50');await page.getByLabel('Item Description',{exact:true}).fill('Detailed listing description');
+ const method = mode === 'zero' ? 'delivery' : mode === 'five' ? 'collection' : 'both';
+ await page.getByLabel('Fulfilment method').selectOption(method);
+ if (method !== 'collection') {
+  await page.getByLabel('Postage (GBP)').fill(mode === 'zero' ? '0' : '4.95');
+  await page.getByLabel('Dispatch service').fill('Royal Mail');
+  await page.getByLabel('Handling time (working days)').fill('2');
+ }
+ if (method !== 'delivery') await page.getByLabel('Collection town or area').fill('Central London');
  await page.getByLabel('Item photographs',{exact:true}).setInputFiles({name:'front.png',mimeType:'image/png',buffer:readFileSync('public/images/auction-house-background.png')});
  await page.getByRole('button',{name:'Submit listing',exact:true}).click();await expect(page).toHaveURL(/my-auctions\?submitted=1/);
  const [lot]=await(await request.get('http://127.0.0.1:54399/rest/v1/lots')).json();expect(lot.max_auto_relistings).toBe(mode==='zero'?0:5);expect(lot.relist_unlimited).toBe(mode==='unlimited');expect(lot.auto_relistings_used).toBe(0);
+ const terms=await(await request.get(`http://127.0.0.1:54399/_test/listing-terms?lot=${lot.id}`)).json();
+ expect(terms.mode).toBe(method);
+ if (method !== 'collection') expect(terms.postage_minor).toBe(mode === 'zero' ? 0 : 495);
 });
 for(const width of [375,1440])test(`seller management, confirmation and pending active removal at ${width}px`,async({page,context,request})=>{
  await request.post(fixture,{data:{mode:'empty'}});await request.post(fixture,{data:{mode:'management'}});const hub=new RealtimeFixture();await hub.attach(context);await page.setViewportSize({width,height:1000});await login(page);

@@ -21,7 +21,11 @@ export async function getCompletedAuctions(mode: "buyer" | "seller", page = 1, l
   // The legacy history RPC contains original paths, not image IDs. Resolve only
   // this bounded page to stable thumbnail endpoints, without signing originals.
   const paths = records.flatMap(row => row.storage_path ? [row.storage_path] : []);
-  const lookup = paths.length ? await client.from("lot_images").select("id,storage_path,thumbnail_path,display_path").in("storage_path", paths) : { data: [], error: null };
+  const [lookup, orders] = await Promise.all([
+    paths.length ? client.from("lot_images").select("id,storage_path,thumbnail_path,display_path").in("storage_path", paths) : { data: [], error: null },
+    records.length ? client.from("fulfilment_orders").select("lot_id,payment_state,shipping_state,fulfilment_method")
+      .in("lot_id", records.map(row => row.lot_id)) : { data: [] },
+  ]);
   if (lookup.error) throw new Error("Could not load auction photographs.");
   const variants = new Map((lookup.data ?? []).map(image => [image.storage_path, image]));
   const ids = new Map((lookup.data ?? []).map(image => [image.storage_path, image.id]));
@@ -31,6 +35,7 @@ export async function getCompletedAuctions(mode: "buyer" | "seller", page = 1, l
     alt_text: row.title, sort_order: 0, created_at: row.completed_at,
   })));
   const urls = new Map(photos.map(photo => [photo.lot_id, photo.image_url]));
-  return { records: records.map(record => ({ ...record, image_url: urls.get(record.lot_id) })), hasNext: (data?.length ?? 0) > historyPageSize, page, focused: Boolean(lotId) };
+  const progress = new Map((orders.data ?? []).map(order => [order.lot_id, order]));
+  return { records: records.map(record => ({ ...record, image_url: urls.get(record.lot_id), progress: progress.get(record.lot_id) })), hasNext: (data?.length ?? 0) > historyPageSize, page, focused: Boolean(lotId) };
 }
 export type CompletedAuctionPage = Awaited<ReturnType<typeof getCompletedAuctions>>;

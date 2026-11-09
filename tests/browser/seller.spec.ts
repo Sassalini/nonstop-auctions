@@ -17,7 +17,9 @@ async function fill(page: Page, title = 'Seller porcelain vase') {
   await page.getByLabel('Item title', { exact:true }).fill(title);
   await page.getByLabel('Auction room', { exact:true }).selectOption(hall);
   await page.getByLabel('Starting bid (GBP)', { exact:true }).fill('25.50');
-  await page.locator('textarea').fill('Porcelain vase. Excellent condition, 1930s, 20cm, no known repairs.');
+  await page.getByLabel('Item Description', { exact:true }).fill('Porcelain vase. Excellent condition, 1930s, 20cm, no known repairs.');
+  await page.getByLabel('Fulfilment method').selectOption('collection');
+  await page.getByLabel('Collection town or area').fill('Central London');
 }
 test.beforeEach(async ({ request }) => {
   await request.post(fixture, { data:{ mode:'empty' } });
@@ -29,7 +31,7 @@ test('seller copy, authentication gate, all active rooms and desktop/mobile layo
   await expect(page.getByRole('heading', { name:'Sell an Item.', exact:true })).toBeVisible();
   for (const name of ['Moderation','Trusted Sellers','A fully online Traditional Experience','High Quality As Standard']) await expect(page.getByRole('heading', { name,exact:true })).toBeVisible();
   await expect(page.getByRole('button', { name:'Submit listing' })).toBeDisabled();
-  await expect(page.locator('select option')).toHaveCount(13);
+  await expect(page.getByLabel('Auction room', { exact:true }).locator('option')).toHaveCount(13);
   await expect(page.locator('textarea')).not.toHaveAttribute('placeholder');
   await expect(page.getByText(/reserve preference|reserve amount|opening soon/i)).toHaveCount(0);
   for (const width of [320,375,768,1440]) {

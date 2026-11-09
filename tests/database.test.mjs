@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import { readFile, readdir } from 'node:fs/promises';
 import { after, before, test } from 'node:test';
 import { PGlite } from '@electric-sql/pglite';
@@ -267,6 +268,171 @@ test('blocking preserves active order communication but does not expose other ad
  const aid=await transaction(other,'save_address',{details:delivery,default:true});
  await assert.rejects(transaction(bidder,'save_address',{id:aid,details:delivery}),/unavailable/);
  await assert.rejects(transaction(bidder,'save_address',{details:{...delivery,recipient:''}}),/required/);
+}));
+
+const deliveryTerms = { mode: 'delivery', postage_minor: 495, postcode_areas: ['SW'], service: 'Royal Mail',
+  handling_days: 2, restrictions: 'Signature required' };
+const collectionTerms = { mode: 'collection', collection_area: 'Central London' };
+const bothTerms = { ...deliveryTerms, ...collectionTerms, mode: 'both' };
+const account = 'acct_testSeller';
+const setTerms = (user, lot, terms) => asUser(user, () =>
+  db.query('select public.set_listing_fulfilment($1,$2)', [lot, terms]));
+
+async function createStructuredDraft() {
+  const testRoom = randomUUID();
+  await db.query("insert into public.auction_rooms(id,name,slug) values($1,'Checkout room',$2)", [testRoom, testRoom]);
+  const { id } = (await asUser(seller, () => db.query(
+    "select * from public.save_seller_draft($1,$2,'Checkout lot','An auction lot for test checkout',125)",
+    [randomUUID(), testRoom],
+  ))).rows[0];
+  const photo = (await asUser(seller, () => db.query(
+    "select * from public.prepare_seller_photo_variants($1,$2,'png')", [id, randomUUID()],
+  ))).rows[0];
+  for (const [path, mimetype] of [[photo.storage_path, 'image/png'], [photo.thumbnail_path, 'image/webp'], [photo.display_path, 'image/webp']]) {
+    await db.query("insert into storage.objects(bucket_id,name,metadata) values('lot-photos',$1,$2)", [path, { mimetype, size: 1024 }]);
+  }
+  return { id, testRoom };
+}
+
+async function structuredSale(terms) {
+  const { id, testRoom } = await createStructuredDraft();
+  await setTerms(seller, id, terms);
+  await asUser(seller, () => db.query('select public.submit_seller_lot($1)', [id]));
+  const advance = () => db.query('select public.advance_room_lifecycle($1)', [testRoom]);
+  await advance();
+  await expire(id);
+  await advance();
+  await asUser(bidder, () => db.query('select public.place_bid($1,$2)', [id, '125.10']));
+  await expire(id);
+  await advance();
+  await db.query('insert into public.seller_stripe_test_accounts values ($1,$2)', [seller, account]);
+  return (await db.query('select * from public.fulfilment_orders where lot_id=$1', [id])).rows[0];
+}
+
+const reserve = (order, method, address = null, user = bidder) => db.query(
+  'select * from public.reserve_test_checkout($1,$2,$3,$4,$5)', [user, order.id, method, address, account],
+).then(result => result.rows[0]);
+
+const record = (attempt, kind, { event = randomUUID(), refund = null, adjustment = null, status = null, total = attempt.total_minor } = {}) =>
+  db.query('select public.record_test_payment($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',
+    [event, attempt.id, account, `cs_test_${attempt.id}`, `pi_${attempt.id}`, total, kind, refund, adjustment, status]);
+
+const currentOrder = order => db.query('select * from public.fulfilment_orders where id=$1', [order.id]).then(result => result.rows[0]);
+
+test('all listing fulfilment modes are validated, published with public terms and locked before bids', () => fixture(async () => {
+  for (const terms of [deliveryTerms, collectionTerms, bothTerms]) {
+    const { id } = await createStructuredDraft();
+    await assert.rejects(asUser(seller, () => db.query('select public.submit_seller_lot($1)', [id])), /Set delivery or collection/);
+    await assert.rejects(setTerms(bidder, id, terms), /own draft/);
+    await assert.rejects(setTerms(seller, id, { ...deliveryTerms, postage_minor: 1.01 }), /valid delivery/);
+    await assert.rejects(setTerms(seller, id, { ...collectionTerms, collection_area: '10 Example Road SW1A 1AA' }), /general area/);
+    await setTerms(seller, id, terms);
+    await assert.rejects(asUser(seller, () => db.query("update public.lots set shipping_info='Changed' where id=$1", [id])), /structured fulfilment terms/);
+    await asUser(seller, () => db.query('select public.submit_seller_lot($1)', [id]));
+    const published = await row(id);
+    const lookup = () => db.query('select details from public.listing_fulfilment_terms where lot_id=$1', [id]);
+    assert.equal((await asUser(seller, lookup)).rows[0].details.mode, terms.mode);
+    assert.equal((await asUser(bidder, lookup)).rows.length, 0);
+    assert.match(published.shipping_info, terms.mode === 'collection' ? /Free collection/ : /£4.95/);
+    await assert.rejects(setTerms(seller, id, collectionTerms), /own draft/);
+    await denied(() => db.query("update public.lots set shipping_info='Changed' where id=$1", [id]), /Published fulfilment terms are fixed/);
+  }
+}));
+
+test('winner-only checkout uses the frozen price and postcode, holds a private address, and deduplicates settlement', () => fixture(async () => {
+  const order = await structuredSale(deliveryTerms);
+  assert.equal(order.payment_state, 'UNPAID');
+  assert.equal(Number(order.winning_minor), 12510);
+  assert.deepEqual(order.terms_snapshot.postcode_areas, ['SW']);
+  assert.deepEqual((await db.query("select kind from public.notifications where lot_id=$1 and user_id=$2 and kind like 'WON%'", [order.lot_id, bidder])).rows,
+    [{ kind: 'WON_PAYMENT_REQUIRED' }]);
+  assert.equal((await asUser(other, () => db.query('select * from public.fulfilment_orders where id=$1', [order.id]))).rows.length, 0);
+  await assert.rejects(asUser(bidder, () => reserve(order, 'delivery')), /permission denied/);
+  await assert.rejects(asUser(seller, () => db.query("update public.fulfilment_orders set payment_state='PAID'")), /permission denied/);
+  await assert.rejects(asUser(seller, () => db.query('select * from public.seller_stripe_test_accounts')), /permission denied/);
+  await assert.rejects(transaction(seller, 'shipping', { order: order.id, version: 0, state: 'DISPATCHED' }), /confirmed payment/);
+
+  const address = await transaction(bidder, 'save_address', { details: delivery });
+  const outside = await transaction(bidder, 'save_address', { details: { ...delivery, postcode: 'EH1 1AA' } });
+  const stranger = await transaction(other, 'save_address', { details: delivery });
+  await denied(() => reserve(order, 'delivery', address, other), /Order unavailable/);
+  await denied(() => reserve(order, 'collection'), /method is not offered/);
+  await denied(() => reserve(order, 'delivery', outside), /does not deliver/);
+  await denied(() => reserve(order, 'delivery', stranger), /own saved address/);
+
+  const attempt = await reserve(order, 'delivery', address);
+  assert.equal(attempt.total_minor, 13005);
+  assert.equal(attempt.id, (await reserve(order, 'delivery', address)).id);
+  assert.equal((await currentOrder(order)).payment_state, 'PENDING');
+  await assert.rejects(asUser(seller, () => db.query('select * from public.stripe_checkout_attempts')), /permission denied/);
+  assert.equal((await asUser(seller, () => db.query('select address_snapshot from public.fulfilment_orders where id=$1', [order.id]))).rows[0].address_snapshot, null);
+  await transaction(bidder, 'save_address', { id: address, details: { ...delivery, line1: 'Updated address' } });
+  await assert.rejects(asUser(seller, () => record(attempt, 'paid')), /permission denied/);
+  await denied(() => record(attempt, 'paid', { total: 100 }), /does not match/);
+  await record(attempt, 'failed');
+  assert.equal((await currentOrder(order)).payment_state, 'FAILED');
+  assert.equal((await reserve(order, 'delivery')).id, attempt.id);
+  await record(attempt, 'paid', { event: 'evt_paid_once' });
+  await record(attempt, 'paid', { event: 'evt_paid_once' });
+  await record(attempt, 'paid', { event: 'evt_second_paid_notice' });
+  await record(attempt, 'failed');
+  const paid = await currentOrder(order);
+  assert.equal(paid.payment_state, 'PAID');
+  assert.equal(paid.address_snapshot.line1, delivery.line1);
+  assert.equal(paid.shipping_state, 'AWAITING_DISPATCH');
+  assert.equal((await db.query("select count(*)::int n from public.notifications where lot_id=$1 and kind in ('PAYMENT_CONFIRMED','ORDER_PAID')", [order.lot_id])).rows[0].n, 2);
+  await denied(() => reserve(order, 'delivery'), /not eligible/);
+  await transaction(seller, 'shipping', { order: order.id, version: paid.version, state: 'DISPATCHED', service: 'Royal Mail', tracking: 'TRACK123' });
+  assert.equal((await asUser(bidder, () => currentOrder(order))).tracking, 'TRACK123');
+  await transaction(bidder, 'receipt', { order: order.id, version: paid.version + 1 });
+  assert.equal((await currentOrder(order)).shipping_state, 'DELIVERED');
+}));
+
+test('expired checkout releases the reservation, collection needs both parties, and refunds and disputes survive event reordering', () => fixture(async () => {
+  const order = await structuredSale(bothTerms);
+  const address = await transaction(bidder, 'save_address', { details: delivery });
+  const expired = await reserve(order, 'delivery', address);
+  await denied(() => reserve(order, 'collection'), /existing checkout uses different details/);
+  await record(expired, 'expired', { event: 'evt_expiry' });
+  const attempt = await reserve(order, 'collection');
+  assert.notEqual(attempt.id, expired.id);
+  assert.equal(attempt.total_minor, 12510);
+  assert.equal(attempt.postage_minor, 0);
+  await record(expired, 'expired', { event: 'evt_expiry_repeat' });
+  assert.equal((await currentOrder(order)).payment_state, 'PENDING');
+  await denied(() => record(expired, 'paid'), /released session/);
+
+  await record(attempt, 'paid');
+  let view = await currentOrder(order);
+  assert.equal(view.shipping_state, 'PREPARING_COLLECTION');
+  assert.equal(view.address_snapshot, null);
+  const action = (user, kind, props = {}) => transaction(user, kind, { order: order.id, version: view.version, ...props });
+  await assert.rejects(action(bidder, 'collection_confirm'), /cannot be confirmed/);
+  await action(seller, 'collection', { state: 'READY_FOR_COLLECTION' });
+  view = await currentOrder(order);
+  await action(seller, 'collection', { state: 'COLLECTION_ARRANGED', notes: 'Saturday 10am via private message' });
+  view = await currentOrder(order);
+  await action(seller, 'collection_confirm');
+  view = await currentOrder(order);
+  assert.equal(view.shipping_state, 'COLLECTION_ARRANGED');
+  await action(bidder, 'collection_confirm');
+  assert.equal((await currentOrder(order)).shipping_state, 'DELIVERED');
+
+  await record(attempt, 'refund', { refund: 500, adjustment: 're_partial', status: 'SUCCEEDED' });
+  await record(attempt, 'refund', { refund: 500, adjustment: 're_partial', status: 'PENDING' });
+  assert.equal((await currentOrder(order)).refunded_minor, 500);
+  assert.equal((await currentOrder(order)).payment_state, 'PARTIALLY_REFUNDED');
+  await record(attempt, 'dispute', { adjustment: 'dp_order', status: 'OPEN' });
+  assert.equal((await currentOrder(order)).payment_state, 'DISPUTED');
+  await record(attempt, 'dispute', { adjustment: 'dp_order', status: 'RESOLVED' });
+  await record(attempt, 'dispute', { adjustment: 'dp_order', status: 'OPEN' });
+  assert.equal((await currentOrder(order)).payment_state, 'PARTIALLY_REFUNDED');
+  await record(attempt, 'refund', { refund: 500, adjustment: 're_partial', status: 'FAILED' });
+  await record(attempt, 'refund', { refund: 500, adjustment: 're_partial', status: 'SUCCEEDED' });
+  assert.equal((await currentOrder(order)).refunded_minor, 0);
+  await record(attempt, 'refund', { refund: 12510, adjustment: 're_full', status: 'SUCCEEDED' });
+  await record(attempt, 'paid');
+  assert.equal((await currentOrder(order)).payment_state, 'REFUNDED');
 }));
 test('saved addresses support multiple entries, exclusive defaults and private owner-only edits/deletes',()=>fixture(async()=>{
  const a=await transaction(bidder,'save_address',{details:delivery,default:true});

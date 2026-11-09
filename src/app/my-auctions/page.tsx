@@ -42,6 +42,7 @@ export default async function MyAuctionsPage({ searchParams }: { searchParams: P
       description="Your watched lots and bid activity, together in one place."
     >
       <AccountNavigation current="sold" />
+      <Link prefetch={false} href="/account/seller-payments" className="mb-4 inline-block text-sm text-auction-gold underline">Seller payment setup</Link>
       <CompletedAuctions mode="seller" history={history} />
       {submitted ? <p role="status" className="mb-5 rounded-lg border border-auction-gold/30 bg-auction-panel/90 p-4 text-sm text-auction-gold">Listing submitted successfully to the auction room queue.</p> : null}
       <section className="mb-5 rounded-lg border border-white/10 bg-auction-panel/90 p-5 shadow-glow">

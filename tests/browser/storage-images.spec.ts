@@ -1,14 +1,19 @@
-import {test,expect} from '@playwright/test';
+import {test,expect,type Page} from '@playwright/test';
 import {readFileSync} from 'node:fs';
 import {mkdir,writeFile} from 'node:fs/promises';
 import sharp from 'sharp';
 import {RealtimeFixture} from '../helpers/realtime-fixture';
 const api='http://127.0.0.1:54399';
+async function setListingTerms(page: Page) {
+ await page.getByLabel('Fulfilment method').selectOption('collection');
+ await page.getByLabel('Collection town or area').fill('Central London');
+}
 test('measure stored photograph variants on each surface and intentional original inspection',async({page,request,context,browser})=>{
  test.setTimeout(100000);await request.post(api+'/_test/state',{data:{mode:'empty'}});await request.post(api+'/_test/state',{data:{mode:'seller'}});
  const hub=new RealtimeFixture();await hub.attach(context);
  await page.goto('/login?next=/sell');await page.getByLabel('Email',{exact:true}).fill('one@example.test');await page.getByLabel('Password',{exact:true}).fill('fixturepassword');await page.getByRole('button',{name:'Sign In',exact:true}).click();await expect(page).toHaveURL(/\/sell$/);
  await page.getByLabel('Item title',{exact:true}).fill('Storage audit main');await page.getByLabel('Auction room',{exact:true}).selectOption('10000000-0000-0000-0000-000000000007');await page.getByLabel('Starting bid (GBP)',{exact:true}).fill('100');await page.locator('textarea').fill('Detailed photograph test.');
+ await setListingTerms(page);
  const original=readFileSync('public/images/auction-house-background.png');
  await page.getByLabel('Item photographs',{exact:true}).setInputFiles([{name:'front.png',mimeType:'image/png',buffer:original},{name:'back.png',mimeType:'image/png',buffer:original}]);await expect(page.getByRole('img',{name:'Item photograph 2',exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Submit listing',exact:true})).toBeEnabled();await page.getByRole('button',{name:'Submit listing',exact:true}).click();await expect(page).toHaveURL(/submitted=1/);
  await request.post(api+'/_test/state',{data:{photoAuditCopies:8}});
@@ -55,6 +60,7 @@ test('large portrait uploads retain the exact original and correctly scaled WebP
  test.setTimeout(45000);await request.post(api+'/_test/state',{data:{mode:'empty'}});await request.post(api+'/_test/state',{data:{mode:'seller'}});
  await page.goto('/login?next=/sell');await page.getByLabel('Email',{exact:true}).fill('one@example.test');await page.getByLabel('Password',{exact:true}).fill('fixturepassword');await page.getByRole('button',{name:'Sign In',exact:true}).click();await expect(page).toHaveURL(/\/sell$/);
  await page.getByLabel('Item title',{exact:true}).fill('Portrait detail');await page.getByLabel('Auction room',{exact:true}).selectOption('10000000-0000-0000-0000-000000000007');await page.getByLabel('Starting bid (GBP)',{exact:true}).fill('100');await page.locator('textarea').fill('Detailed portrait photograph.');
+ await setListingTerms(page);
  const original=await sharp(readFileSync('public/images/auction-house-background.png')).rotate(90).resize(2000,3000).jpeg({quality:90}).toBuffer();
  await page.getByLabel('Item photographs',{exact:true}).setInputFiles({name:'portrait.jpg',mimeType:'image/jpeg',buffer:original});await expect(page.getByRole('button',{name:'Submit listing',exact:true})).toBeEnabled();await page.getByRole('button',{name:'Submit listing',exact:true}).click();await expect(page).toHaveURL(/submitted=1/);
  const objects=await(await request.get(api+'/_test/photo-metrics')).json();const source=objects.find((o:{path:string})=>o.path.endsWith('.jpg'));const id=source.path.split('/').at(-1).split('.')[0];
@@ -66,6 +72,7 @@ test('large portrait uploads retain the exact original and correctly scaled WebP
 test('a resumed draft completes missing variants without replacing its original',async({page,request})=>{
  await request.post(api+'/_test/state',{data:{mode:'empty'}});await request.post(api+'/_test/state',{data:{mode:'seller'}});await page.goto('/login?next=/sell');await page.getByLabel('Email',{exact:true}).fill('one@example.test');await page.getByLabel('Password',{exact:true}).fill('fixturepassword');await page.getByRole('button',{name:'Sign In',exact:true}).click();await expect(page).toHaveURL(/\/sell$/);
  await page.getByLabel('Item title',{exact:true}).fill('Resumed variants');await page.getByLabel('Auction room',{exact:true}).selectOption('10000000-0000-0000-0000-000000000007');await page.getByLabel('Starting bid (GBP)',{exact:true}).fill('100');await page.locator('textarea').fill('Detailed photograph.');
+ await setListingTerms(page);
  await page.getByLabel('Item photographs',{exact:true}).setInputFiles({name:'original.png',mimeType:'image/png',buffer:readFileSync('public/images/auction-house-background.png')});await expect(page.getByRole('button',{name:'Submit listing',exact:true})).toBeEnabled();
  await request.post(api+'/_test/state',{data:{failUploadAfter:2}});await page.getByRole('button',{name:'Submit listing',exact:true}).click();await expect(page.getByRole('status')).toContainText('saved in My Auctions');
  const initial=await(await request.get(api+'/_test/photo-metrics')).json();expect(initial).toHaveLength(1);

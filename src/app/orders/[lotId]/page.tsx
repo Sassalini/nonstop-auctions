@@ -3,8 +3,10 @@ import { notFound } from "next/navigation";
 import { transactionAccount } from "@/lib/transaction-account";
 import { InteriorShell } from "@/components/InteriorShell";
 import { OrderManagement } from "@/components/OrderManagement";
+import { formatCurrency } from "@/lib/format";
+import { stripeTestOrigin } from "@/lib/stripe-test";
 export const dynamic="force-dynamic";
-export default async function OrderPage({params}:{params:Promise<{lotId:string}>}){
+export default async function OrderPage({params,searchParams}:{params:Promise<{lotId:string}>;searchParams:Promise<{checkout?:string}>}){
  const {client,user}=await transactionAccount("/won-auctions"); const {lotId}=await params;
  if(!/^[\da-f-]{36}$/i.test(lotId))notFound();
  const {data:order,error}=await client.from("fulfilment_orders").select("*").eq("lot_id",lotId).maybeSingle();
@@ -14,5 +16,10 @@ export default async function OrderPage({params}:{params:Promise<{lotId:string}>
  user.id===order.buyer_id?client.from("delivery_addresses").select("*").order("is_default",{ascending:false}).limit(20):Promise.resolve({data:[]}),
  client.from("fulfilment_events").select("*").eq("order_id",order.id).order("version",{ascending:false}).limit(30),
  client.rpc("completed_auctions_page_with_reference",{p_mode:user.id===order.buyer_id?"buyer":"seller",p_lot_id:lotId,p_limit:1})]);
- return <InteriorShell eyebrow="Private Desk" title={history?.[0]?.title??"Order details"} description={`Winning price: ${history?.[0]?.sale_price??"See auction result"} · Payment not recorded. Shipping updates do not confirm payment.`}><OrderManagement order={order} buyer={user.id===order.buyer_id} addresses={addresses??[]} events={events??[]}/></InteriorShell>;
+ const price=order.winning_minor!=null ? order.winning_minor/100 : history?.[0]?.sale_price;
+ return <InteriorShell eyebrow="Private Desk" title={history?.[0]?.title??"Order details"}
+  description={price!=null ? `Winning bid · ${formatCurrency(price)}` : "View the winning bid in your auction history."}>
+  <OrderManagement order={order} buyer={user.id===order.buyer_id} addresses={addresses??[]} events={events??[]}
+   checkoutEnabled={Boolean(stripeTestOrigin())} returned={(await searchParams).checkout==="returned"}/>
+ </InteriorShell>;
 }

@@ -12,16 +12,34 @@ const messages: Record<NotificationKind, string> = {
  DISPATCHED: "Seller dispatched your item",
  TRACKING_ADDED: "Tracking information updated",
  RECEIPT_CONFIRMED: "Buyer confirmed receipt",
- DELIVERY_ISSUE: "A delivery issue was reported",
+ DELIVERY_ISSUE: "A fulfilment issue was reported",
+ PAYMENT_CONFIRMED: "Your payment was confirmed",
+ ORDER_PAID: "The buyer’s payment was confirmed",
+ PAYMENT_FAILED: "The payment attempt failed",
+ PAYMENT_REFUNDED: "An order refund was recorded",
+ PAYMENT_REFUND_FAILED: "An order refund failed",
+ PAYMENT_DISPUTED: "An order payment was disputed",
+ PAYMENT_DISPUTE_RESOLVED: "The payment dispute was resolved",
+ COLLECTION_READY: "Your item is ready for collection",
+ COLLECTION_UPDATED: "The collection arrangements changed",
+ COLLECTION_HANDOVER: "The seller recorded collection handover",
+ COLLECTION_CONFIRMED: "The buyer confirmed collection",
   WATCHED_LIVE: "A watched lot is now open for bidding",
   WATCHED_SOLD: "A watched lot has sold",
   WATCHED_UNSOLD: "A watched lot ended unsold",
   WON: "You won this auction",
+  WON_PAYMENT_REQUIRED: "You won this auction · Payment required",
   SELLER_LIVE: "Your listed lot is now open for bidding",
   SELLER_SOLD: "Your listed lot has sold",
   SELLER_FIRST_BID: "Your listing received its first bid",
   WATCHED_FIRST_BID: "A watched lot received its first bid",
 };
+
+const orderNotices = new Set<NotificationKind>([
+  "WON_PAYMENT_REQUIRED", "ADDRESS_CONFIRMED", "DISPATCHED", "TRACKING_ADDED", "RECEIPT_CONFIRMED", "DELIVERY_ISSUE",
+  "PAYMENT_CONFIRMED", "ORDER_PAID", "PAYMENT_FAILED", "PAYMENT_REFUNDED", "PAYMENT_REFUND_FAILED", "PAYMENT_DISPUTED",
+  "PAYMENT_DISPUTE_RESOLVED", "COLLECTION_READY", "COLLECTION_UPDATED", "COLLECTION_HANDOVER", "COLLECTION_CONFIRMED",
+]);
 
 export function AccountNotifications() {
   const [open, setOpen] = useState(false);
@@ -158,7 +176,7 @@ export function AccountNotifications() {
         {!items.length && !error ? <p className="text-sm text-auction-muted">No notifications yet.</p> : null}
         <ul className="divide-y divide-white/10">
           {items.map((item) => <li key={item.id} className={`flex gap-2 py-3 ${item.read_at ? "opacity-70" : ""}`}>
-            <Link href={item.kind === "NEW_MESSAGE" ? "/messages" : ["ADDRESS_CONFIRMED","DISPATCHED","TRACKING_ADDED","RECEIPT_CONFIRMED","DELIVERY_ISSUE"].includes(item.kind) ? `/orders/${item.lot_id}` : item.kind === "WON" ? `/won-auctions?lot=${item.lot_id}#${item.lot_id}` : item.kind === "SELLER_SOLD" ? `/my-auctions?lot=${item.lot_id}#${item.lot_id}` : `/lots/${item.lot_id}?view=manual`} prefetch={false} onClick={() => { setOpen(false); if (!item.read_at) void markRead(item.id); }} className="min-w-0 flex-1 rounded-sm focus-visible:outline-auction-gold">
+            <Link href={item.kind === "NEW_MESSAGE" ? "/messages" : orderNotices.has(item.kind) ? `/orders/${item.lot_id}` : item.kind === "WON" ? `/won-auctions?lot=${item.lot_id}#${item.lot_id}` : item.kind === "SELLER_SOLD" ? `/my-auctions?lot=${item.lot_id}#${item.lot_id}` : `/lots/${item.lot_id}?view=manual`} prefetch={false} onClick={() => { setOpen(false); if (!item.read_at) void markRead(item.id); }} className="min-w-0 flex-1 rounded-sm focus-visible:outline-auction-gold">
               <p className={`text-sm ${item.read_at ? "text-auction-ivory" : "text-auction-gold"}`}>{messages[item.kind]}</p>
               <p className="mt-1 text-xs text-auction-muted">Lot {item.lot_reference}</p>
               <p className="mt-1 break-words text-xs text-auction-muted">{item.lot_title}</p>
