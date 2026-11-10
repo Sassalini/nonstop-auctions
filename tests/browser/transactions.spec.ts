@@ -1,9 +1,14 @@
 import { expect,test, type Page } from '@playwright/test';
 import Stripe from 'stripe';
+import { RealtimeFixture } from '../helpers/realtime-fixture';
 const lot='20000000-0000-0000-0000-000000000701';
+const buyerId='00000000-0000-0000-0000-000000000102';
 const orderUrl = `/orders/${lot}`;
 const fixture = 'http://127.0.0.1:54399/_test';
 const checkoutButton = 'Pay Now with Stripe';
+const continueButton = 'Continue Payment';
+const retryButton = 'Retry Payment';
+const paymentNotice = { user_id: buyerId, lot_id: lot, kind: 'PAYMENT_CONFIRMED' };
 
 async function signIn(page: Page, email = 'one@example.test', next = orderUrl) {
   await page.goto(`/login?next=${next}`);
@@ -70,10 +75,41 @@ test('Stripe webhook verifies the raw payload before handling an event', async (
   expect((await send(data)).status()).toBe(204);
 });
 
+test('an open Stripe session keeps a payment action on a return URL and after refresh', async ({ page, context, request }) => {
+  test.skip(process.env.TEST_STRIPE_CHECKOUT !== '1', 'Runs with the explicit sandbox checkout fixture flag');
+  await request.post(`${fixture}/state`, { data: { mode: 'checkout' } });
+  const realtime = new RealtimeFixture();
+  await realtime.attach(context);
+  await page.route('https://checkout.stripe.com/**', route => route.fulfill({
+    contentType: 'text/html', body: '<h1>Hosted Checkout fixture</h1>',
+  }));
+  await signIn(page);
+  await page.getByRole('combobox', { name: 'Fulfilment method' }).selectOption('collection');
+  await page.locator('#checkout').getByRole('button', { name: checkoutButton }).click();
+  await expect(page.getByRole('heading', { name: 'Hosted Checkout fixture' })).toBeVisible();
+  const { session } = await (await request.get(`${fixture}/checkout`)).json();
+
+  await page.goto(session.successUrl);
+  await expect(page.getByText('Payment · Checkout in progress', { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.locator('#checkout').getByRole('button', { name: continueButton })).toBeEnabled();
+  await expect.poll(() => realtime.hasChannel(`order-payment-${lot}-${buyerId}`)).toBe(true);
+  const refreshed = page.waitForRequest(req => req.url().includes(orderUrl) && req.headers()['rsc'] === '1');
+  realtime.emit('notifications', paymentNotice, 'INSERT');
+  await refreshed;
+  await expect(page.locator('#checkout').getByRole('button', { name: continueButton })).toBeEnabled();
+  await page.goto(session.cancelUrl);
+  await page.locator('#checkout').getByRole('button', { name: continueButton }).click();
+  await expect(page.getByRole('heading', { name: 'Hosted Checkout fixture' })).toBeVisible();
+  expect((await (await request.get(`${fixture}/checkout`)).json()).sessions).toBe(1);
+});
+
 test('sandbox checkout opens for the winner and only a signed webhook settles it', async ({ page, context, browser, request }) => {
   test.skip(process.env.TEST_STRIPE_CHECKOUT !== '1', 'Runs with the explicit sandbox checkout fixture flag');
   const state = `${fixture}/state`;
   await request.post(state, { data: { mode: 'checkout' } });
+  const realtime = new RealtimeFixture();
+  await realtime.attach(context);
   await context.route('https://checkout.stripe.com/**', route => route.fulfill({
     status: 200, contentType: 'text/html', body: '<h1>Hosted Checkout fixture</h1>',
   }));
@@ -93,7 +129,6 @@ test('sandbox checkout opens for the winner and only a signed webhook settles it
   await expect(page.getByRole('heading', { name: 'Hosted Checkout fixture' })).toBeVisible();
   await expect(otherTab.getByRole('heading', { name: 'Hosted Checkout fixture' })).toBeVisible();
   expect(page.url()).toBe(otherTab.url());
-  await otherTab.close();
   const { session, attempt, sessions } = await (await request.get(`${fixture}/checkout`)).json();
   expect(sessions).toBe(1);
   expect(attempt.total_minor).toBe(27500);
@@ -115,11 +150,15 @@ test('sandbox checkout opens for the winner and only a signed webhook settles it
 
   await page.goto(session.cancelUrl);
   await expect(page.getByText('Payment · Checkout in progress', { exact: true })).toBeVisible();
-  await expect(page.locator('#checkout').getByRole('button', { name: 'Resume checkout' })).toBeEnabled();
+  await expect(page.locator('#checkout').getByRole('button', { name: continueButton })).toBeEnabled();
+  await otherTab.goto(session.cancelUrl);
+  await expect(otherTab.locator('#checkout').getByRole('button', { name: continueButton })).toBeEnabled();
+  await request.post(state, { data: { captureStripe: true } });
   await page.goto(session.successUrl);
   await expect(page.getByText('Payment · Payment processing', { exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Resume checkout' })).toHaveCount(0);
-  await request.post(state, { data: { captureStripe: true } });
+  await expect(page.getByRole('button', { name: continueButton })).toHaveCount(0);
+  await page.goto(session.cancelUrl);
+  await expect(page.getByText('Payment · Payment processing', { exact: true })).toBeVisible();
   const payload = JSON.stringify({
     id: 'evt_browser_fixture_paid', type: 'checkout.session.completed', livemode: false, account: 'acct_browserFixture',
     data: { object: { id: session.id, metadata: { nonstop_test_attempt: attempt.id } } },
@@ -133,12 +172,16 @@ test('sandbox checkout opens for the winner and only a signed webhook settles it
   await expect(page.getByText('Payment · Payment processing', { exact: true })).toBeVisible();
   expect((await deliver(signature)).status()).toBe(204);
   expect((await deliver(signature)).status()).toBe(204);
-  await expect(page.getByText('Payment · Paid', { exact: true })).toBeVisible();
+  realtime.emit('notifications', paymentNotice, 'INSERT');
+  await expect(otherTab.getByText('Payment · Payment Confirmed', { exact: true })).toBeVisible();
+  await expect(otherTab.getByRole('button', { name: continueButton })).toHaveCount(0);
+  await otherTab.close();
+  await expect(page.getByText('Payment · Payment Confirmed', { exact: true })).toBeVisible();
   await expect(page.getByText('Fulfilment · Preparing for collection', { exact: true })).toBeVisible();
   expect((await (await request.get(`${fixture}/checkout`)).json()).orderPaidNotifications).toBe(1);
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
   await signIn(page, 'two@example.test');
-  await expect(page.getByText('Payment · Paid', { exact: true })).toBeVisible();
+  await expect(page.getByText('Payment · Payment Confirmed', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Save collection update' })).toBeVisible();
   await expect(page.getByRole('button', { name: checkoutButton })).toHaveCount(0);
 });
@@ -153,7 +196,11 @@ test('delivery uses the saved address and postage, and only a verified expiry un
   await signIn(page);
   await expect(page.locator('#checkout').getByText(/until the seller sets up Stripe/)).toBeVisible();
   await expect(page.getByRole('button', { name: checkoutButton })).toHaveCount(0);
-  await request.post(`${fixture}/state`, { data: { stripeMapped: true } });
+  await request.post(`${fixture}/state`, { data: { stripeMapped: true, stripeReady: false } });
+  await page.reload();
+  await expect(page.locator('#checkout').getByText(/seller’s Stripe account cannot accept payments yet/)).toBeVisible();
+  await expect(page.getByRole('button', { name: checkoutButton })).toHaveCount(0);
+  await request.post(`${fixture}/state`, { data: { stripeReady: true } });
   await page.reload();
   await expect(page.locator('#checkout').getByText('Please select a delivery address', { exact: true })).toBeVisible();
   await page.getByRole('link', { name: 'Add New Address' }).click();
@@ -169,9 +216,13 @@ test('delivery uses the saved address and postage, and only a verified expiry un
   expect(attempt.pending_address.postcode).toBe('SW1A 1AA');
   await page.goto(session.cancelUrl);
   await request.post(`${fixture}/state`, { data: { expireStripe: true } });
-  await page.locator('#checkout').getByRole('button', { name: 'Resume checkout' }).click();
+  await page.reload();
+  await expect(page.locator('#checkout').getByRole('button', { name: retryButton })).toBeEnabled();
+  expect((await (await request.get(`${fixture}/checkout`)).json()).sessions).toBe(1);
+  await page.locator('#checkout').getByRole('button', { name: retryButton }).click();
   await expect(page.getByText('Payment · Checkout expired', { exact: true })).toBeVisible();
-  await page.locator('#checkout').getByRole('button', { name: checkoutButton }).click();
+  await expect(page.getByRole('combobox', { name: 'Fulfilment method' })).toBeVisible();
+  await page.locator('#checkout').getByRole('button', { name: retryButton }).click();
   await expect(page.getByRole('heading', { name: 'Hosted Checkout fixture' })).toBeVisible();
   expect((await (await request.get(`${fixture}/checkout`)).json()).sessions).toBe(2);
   expect(new URL(page.url()).pathname).not.toContain(session.id);

@@ -27,14 +27,49 @@ export function stripeTestOrigin() {
   }
 }
 
-export function stripeTestClients(config: NonNullable<ReturnType<typeof stripeTestConfig>>) {
+export function stripeTestCheckoutSetup() {
+  if (process.env.STRIPE_TEST_CHECKOUT_ENABLED !== "true") {
+    return { error: "Online payments are currently unavailable. Stripe test checkout is disabled for this environment." };
+  }
+  const config = stripeTestConfig();
+  if (!config) return { error: "Online payments are unavailable because the Stripe sandbox or staging database configuration is incomplete. Contact support." };
+  const origin = stripeTestOrigin();
+  if (!origin) return { error: "Online payments are unavailable because the checkout return address is misconfigured. Contact support." };
+  return { config, origin };
+}
+
+export function stripeTestClients(config: NonNullable<ReturnType<typeof stripeTestConfig>>,
+  options?: Pick<Stripe.StripeConfig, "timeout" | "maxNetworkRetries">) {
   return {
-    stripe: new Stripe(config.secret, { httpClient: Stripe.createFetchHttpClient(), timeout: 10000, maxNetworkRetries: 1 }),
+    stripe: new Stripe(config.secret, { httpClient: Stripe.createFetchHttpClient(), timeout: 10000, maxNetworkRetries: 1, ...options }),
     admin: createClient<Database>(config.url, config.serviceKey, {
       auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
       global: { fetch: (input, init) => fetch(input, { ...init, cache: "no-store" }) },
     }),
   };
+}
+
+type PaymentAdmin = ReturnType<typeof stripeTestClients>["admin"];
+
+export async function activeTestCheckout(admin: PaymentAdmin, orderId: string) {
+  const { data, error } = await admin.from("stripe_checkout_attempts")
+    .select("id,stripe_account,session_id,total_minor,method,created_at").eq("order_id", orderId).is("released_at", null).maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function testSellerAccount(admin: PaymentAdmin, sellerId: string) {
+  const { data, error } = await admin.from("seller_stripe_test_accounts").select("stripe_account").eq("seller_id", sellerId).maybeSingle();
+  if (error) throw error;
+  return data?.stripe_account;
+}
+
+export function testCheckoutCreatedAt(attempt: Pick<StripeCheckoutAttempt, "created_at">) {
+  return Math.floor(new Date(attempt.created_at).getTime() / 1000);
+}
+
+export function canRetryTestCheckoutCreation(attempt: Pick<StripeCheckoutAttempt, "created_at">) {
+  return Date.now() / 1000 <= testCheckoutCreatedAt(attempt) + 60 * 60;
 }
 
 export function sellerCanAcceptTestPayments(account: Stripe.Account) {
@@ -61,4 +96,12 @@ export function verifiedTestIntent(session: Stripe.Checkout.Session, attempt: Pi
 export function isExpiredUnpaidCheckout(session: Stripe.Checkout.Session, intent: Stripe.PaymentIntent | null) {
   return session.status === "expired" && session.payment_status === "unpaid" &&
     (!intent || ["canceled", "requires_payment_method"].includes(intent.status));
+}
+
+export function testCheckoutSessionState(session: Stripe.Checkout.Session, intent: Stripe.PaymentIntent | null) {
+  if (isExpiredUnpaidCheckout(session, intent)) return "expired";
+  if (session.status === "complete" || session.payment_status === "paid" ||
+    (intent && ["processing", "succeeded", "requires_capture"].includes(intent.status))) return "processing";
+  if (session.status === "open" && session.payment_status === "unpaid" && session.url) return "open";
+  throw new Error("Checkout session status is unverified");
 }

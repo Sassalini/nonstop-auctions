@@ -62,14 +62,23 @@ The integration uses the official Stripe SDK with fetch and Web Crypto. It restr
 
 ### Recovery
 
-- A checkout session expires two hours after reservation. An unknown create can be retried with the original key during the first hour. A known open session is reused after cancellation or a decline. When the buyer resumes an expired session, the server retrieves it in the connected account and releases the reservation only after verifying that Stripe has closed it unpaid. An unresolved create after the retry window needs operator reconciliation. The success return displays processing and briefly refreshes order status while the signed webhook settles the order.
+- A checkout session expires two hours after reservation. An unknown create can be retried with the original key during the first hour. **Continue Payment** reuses a verified open session after the buyer leaves Stripe or a card is declined. **Retry Payment** releases an expired reservation only after the server verifies the session closed unpaid. The buyer can then review fulfilment and start a new checkout. An unresolved create after the retry window needs operator reconciliation.
+- The return URL does not determine payment state. The server reads the active Stripe session in the original connected account. A provider-confirmed completion or in-flight payment displays **Payment processing** until the verified webhook records the result. A private payment notification prompts a fresh server read on open order pages. The notification itself cannot confirm payment.
 - If a buyer returns after a payment or expiration and the order still shows pending, check the connected-account event in Stripe Workbench and redeliver it. A webhook 503 requires investigation or retry. Compare the attempt, session and PaymentIntent IDs, account scope and amounts before resolving an error. Never clear a reservation on a timer or because a buyer reports abandonment.
 - If there is no session ID and no webhook, reconcile the attempt with Stripe in the original connected account and creation window using its `nonstop_test_attempt` metadata and Stripe request logs. Only a reviewed operator procedure may release a reservation after proving there is no payable session. A manual release tool is outside this change.
 - Turning off the checkout switch prevents new sessions and onboarding. Keep the signing configuration available until outstanding sandbox attempts have reconciled. It is possible to receive signed Stripe events after the switch is turned off.
 
-### Historical orders, including the reported Lot #1231
+### Diagnosing checkout visibility
+
+Compare the active Cloudflare deployment and the version where the button was last seen. Check the Worker environment, traffic split, presence of the sandbox bindings in the setup table, the explicit enable flag and trusted return origin. Confirm the build’s `NEXT_PUBLIC_SUPABASE_URL` matches the sandbox database binding and that the private Supabase and Stripe credentials belong to those same test projects. Compare names, presence and project alignment without copying secret values into the incident report. [Cloudflare versions and deployments](https://developers.cloudflare.com/workers/versions-and-deployments/)
+
+In the order audit, reservation records `payment_pending` and keeps fulfilment at `AWAITING_PAYMENT`. Card failure keeps the original attempt available when Stripe still reports it open. Verified expiry releases it. Verified payment sets `PAID` and advances fulfilment to dispatch or collection. Use the public lot number from Won Auctions for lookup. The order heading is the listing title.
+
+### Historical orders, including the reported Lot #12
 
 The combination of `NOT_RECORDED` and the old “predates online checkout” message identifies an order without a structured terms snapshot. A winning price and an identifiable buyer are only part of checkout eligibility. The address error came from an empty saved-address selection on the separate legacy fulfilment form.
+
+The signed-in buyer view for Lot #12 displayed the listing title “1231”, the £222 winning bid, missing verified fulfilment terms, payment not recorded and fulfilment preparing for dispatch. The order activity showed address confirmation. This puts the order outside migration 018’s recovery criteria for untouched test orders. Review the original terms, fulfilment and any prior payments together before arranging payment for this order.
 
 On the isolated test database, inspect the sale by permanent reference before deciding whether to recover it. This query includes the IDs needed for operator review and excludes addresses and Stripe account IDs.
 
@@ -86,7 +95,7 @@ from public.lots l
 left join public.fulfilment_orders o on o.lot_id = l.id
 left join public.auction_attempts a on a.lot_id = o.lot_id and a.preview_started_at = o.preview_started_at
 left join public.listing_fulfilment_terms t on t.lot_id = l.id
-where l.lot_reference = 1231;
+where l.lot_reference = 12;
 ```
 
 Before making the order payable, check the original listing and verify with the seller, buyer and any payment records that the full bid is still owed. `NOT_RECORDED` can include payments made outside the site. If the result, participants and original structured terms agree and the order is untouched, the database owner can call `public.enable_reviewed_legacy_test_checkout(order_id, buyer_id, winning_minor)` for that one reviewed test order. If the £222 result is confirmed, the winning amount argument is `22200`. Record the evidence in the operator review. The function rechecks the frozen sale and terms, records the eligibility change, and leaves payment awaiting checkout.

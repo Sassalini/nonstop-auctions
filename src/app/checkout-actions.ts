@@ -2,16 +2,18 @@
 
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { isExpiredUnpaidCheckout, sellerCanAcceptTestPayments, stripeTestClients, stripeTestConfig, stripeTestOrigin, verifiedTestIntent, verifyTestCheckout } from "@/lib/stripe-test";
+import {
+  activeTestCheckout, canRetryTestCheckoutCreation, sellerCanAcceptTestPayments, stripeTestCheckoutSetup,
+  stripeTestClients, stripeTestConfig, stripeTestOrigin, testCheckoutCreatedAt, testCheckoutSessionState,
+  testSellerAccount, verifiedTestIntent, verifyTestCheckout,
+} from "@/lib/stripe-test";
 import { isCheckoutOrder, isUuid } from "@/lib/transactions";
 
 const checkoutWindowSeconds = 2 * 60 * 60;
-const creationRetrySeconds = 60 * 60;
 
 export async function startTestCheckout(form: FormData) {
-  const config = stripeTestConfig();
-  const origin = stripeTestOrigin();
-  if (!config || !origin) return { error: "Online payments are currently unavailable." };
+  const setup = stripeTestCheckoutSetup();
+  if (setup.error !== undefined) return { error: setup.error };
   const lotId = form.get("lot");
   const method = form.get("method");
   const address = form.get("address");
@@ -23,7 +25,7 @@ export async function startTestCheckout(form: FormData) {
   const { data: { user } } = await client.auth.getUser();
   if (!user) return { error: "Sign in as the winning bidder." };
   const { data: order } = await client.from("fulfilment_orders")
-    .select("id,seller_id,winning_minor,payment_state,shipping_state,terms_snapshot,fulfilment_method")
+    .select("id,lot_id,seller_id,winning_minor,payment_state,shipping_state,terms_snapshot,fulfilment_method")
     .eq("lot_id", lotId).eq("buyer_id", user.id).maybeSingle();
   if (!order || order.winning_minor == null) return { error: "Order unavailable." };
   if (!isCheckoutOrder(order)) {
@@ -33,20 +35,15 @@ export async function startTestCheckout(form: FormData) {
     return { error: "Please select a delivery address" };
   }
 
-  const { stripe, admin } = stripeTestClients(config);
-  const returnUrl = `${origin}/orders/${lotId}`;
+  const { stripe, admin } = stripeTestClients(setup.config);
+  const returnUrl = `${setup.origin}/orders/${order.lot_id}`;
   let checkoutUrl: string;
   try {
-    const { data: current, error: lookupError } = await admin.from("stripe_checkout_attempts")
-      .select("stripe_account,session_id").eq("order_id", order.id).is("released_at", null).maybeSingle();
-    if (lookupError) throw lookupError;
-    let accountId = current?.stripe_account;
-    if (!accountId) {
-      const { data: seller, error } = await admin.from("seller_stripe_test_accounts")
-        .select("stripe_account").eq("seller_id", order.seller_id).maybeSingle();
-      if (error) throw error;
-      accountId = seller?.stripe_account;
+    const current = await activeTestCheckout(admin, order.id);
+    if (!current && (order.fulfilment_method || order.payment_state === "PENDING")) {
+      return { error: "The checkout changed. Refresh the order to check payment status." };
     }
+    const accountId = current?.stripe_account ?? await testSellerAccount(admin, order.seller_id);
     if (!accountId) return { error: "The seller has not set up test payments." };
     if (!current?.session_id && !sellerCanAcceptTestPayments(await stripe.accounts.retrieve(accountId))) {
       return { error: "The seller’s Stripe account is not ready to accept payments." };
@@ -59,7 +56,7 @@ export async function startTestCheckout(form: FormData) {
     if (reserveError) return { error: reserveError.code === "P0001" ? reserveError.message : "Checkout is temporarily unavailable." };
     if (!attempt || attempt.stripe_account !== accountId) return { error: "Checkout changed. Please refresh and retry." };
 
-    const created = Math.floor(new Date(attempt.created_at).getTime() / 1000);
+    const created = testCheckoutCreatedAt(attempt);
     const stripeAccount = attempt.stripe_account;
     const metadata = { nonstop_test_attempt: attempt.id };
     const item = (name: string, amount: number) => ({
@@ -68,7 +65,7 @@ export async function startTestCheckout(form: FormData) {
     });
     // The key and request parameters remain stable across concurrent calls and
     // timeouts. Never issue a new create outside the safe retry window.
-    if (!attempt.session_id && Date.now() / 1000 > created + creationRetrySeconds) {
+    if (!attempt.session_id && !canRetryTestCheckoutCreation(attempt)) {
       return { error: "The previous checkout needs reconciliation before another payment can be attempted." };
     }
     let session = attempt.session_id
@@ -83,15 +80,15 @@ export async function startTestCheckout(form: FormData) {
         metadata, payment_intent_data: { metadata },
       }, { stripeAccount, idempotencyKey: `nonstop-test-checkout-${attempt.id}` });
     verifyTestCheckout(session, attempt);
-    if (!attempt.session_id && session.status === "expired") {
+    if (!attempt.session_id && (session.status !== "open" || session.payment_intent)) {
       session = await stripe.checkout.sessions.retrieve(session.id, { expand: ["payment_intent"] }, { stripeAccount });
       verifyTestCheckout(session, attempt);
     }
     const { data: bound, error: bindError } = await admin.rpc("bind_test_checkout", { p_attempt: attempt.id, p_session: session.id });
     if (bindError || !bound) throw new Error("Could not bind Stripe session");
-    if (session.status === "expired") {
-      const intent = verifiedTestIntent(session, attempt);
-      if (!isExpiredUnpaidCheckout(session, intent)) return { error: "Stripe is still reconciling this payment. Please check again shortly." };
+    const intent = verifiedTestIntent(session, attempt);
+    const state = testCheckoutSessionState(session, intent);
+    if (state === "expired") {
       const { error } = await admin.rpc("record_test_payment", {
         p_event: `reconciled-expiry:${session.id}`, p_attempt: attempt.id, p_account: stripeAccount, p_session: session.id,
         p_intent: intent?.id ?? null, p_total: attempt.total_minor, p_kind: "expired",
@@ -99,10 +96,10 @@ export async function startTestCheckout(form: FormData) {
       if (error) throw error;
       return { error: "Checkout expired. Review your order and try again." };
     }
-    if (session.status === "complete") {
+    if (state === "processing") {
       checkoutUrl = `${returnUrl}?checkout=returned`;
     } else {
-      if (session.status !== "open" || session.payment_status !== "unpaid" || !session.url) throw new Error("Checkout unavailable");
+      if (!session.url) throw new Error("Checkout unavailable");
       if (current?.session_id && !sellerCanAcceptTestPayments(await stripe.accounts.retrieve(stripeAccount))) {
         return { error: "The seller’s Stripe account is not ready to accept payments." };
       }

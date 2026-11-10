@@ -5,9 +5,15 @@ import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { transactionAction } from "@/app/transaction-actions";
 import { formatCurrency } from "@/lib/format";
-import { fulfilmentLabel, fulfilmentLabels, isCheckoutOrder, isUuid, paymentLabels, type DeliveryAddress, type FulfilmentOrder, type FulfilmentEvent } from "@/lib/transactions";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { fulfilmentLabel, fulfilmentLabels, isUuid, paymentLabels, type BuyerCheckoutStatus, type DeliveryAddress, type FulfilmentOrder, type FulfilmentEvent } from "@/lib/transactions";
 import { OrderCheckout } from "./OrderCheckout";
 import { buttonStyle, inputStyle, TransactionButton } from "./TransactionControls";
+
+const paymentNotices = new Set([
+  "PAYMENT_CONFIRMED", "ORDER_PAID", "PAYMENT_FAILED", "PAYMENT_REFUNDED", "PAYMENT_REFUND_FAILED",
+  "PAYMENT_DISPUTED", "PAYMENT_DISPUTE_RESOLVED",
+]);
 
 function carrierTrackingLink(service: string, tracking: string) {
   if (!tracking.trim()) return null;
@@ -67,9 +73,9 @@ function SellerFulfilmentForm({ order, collection, legacy }: { order: Fulfilment
   </form>;
 }
 
-export function OrderManagement({ order, buyer, addresses, events, checkoutUnavailable, returned }: {
-  order: FulfilmentOrder; buyer: boolean; addresses: DeliveryAddress[]; events: FulfilmentEvent[];
-  checkoutUnavailable: string | null; returned: boolean;
+export function OrderManagement({ order, buyer, viewerId, addresses, addressUnavailable, events, checkout, checkoutBlock }: {
+  order: FulfilmentOrder; buyer: boolean; viewerId: string; addresses: DeliveryAddress[]; addressUnavailable: boolean;
+  events: FulfilmentEvent[]; checkout: BuyerCheckoutStatus | null; checkoutBlock: string | null;
 }) {
   const router = useRouter();
   const [address, setAddress] = useState(addresses.find(item => item.is_default)?.id ?? addresses[0]?.id ?? "");
@@ -80,8 +86,33 @@ export function OrderManagement({ order, buyer, addresses, events, checkoutUnava
   const shipping = order.shipping_state;
   const paid = order.payment_state === "PAID" || order.payment_state === "PARTIALLY_REFUNDED";
   const canFulfil = (paid || legacy) && shipping !== "CANCELLED";
-  const canCheckout = buyer && isCheckoutOrder(order);
-  const processing = returned && canCheckout && Boolean(order.fulfilment_method);
+  const processing = checkout?.kind === "processing";
+  useEffect(() => {
+    if (legacy) return;
+    const client = createSupabaseBrowserClient();
+    let timer: ReturnType<typeof setTimeout>;
+    const refresh = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => router.refresh(), 200);
+    };
+    // The private notification is only a signal. The server re-reads the order and verifies any active session.
+    const channel = client.channel(`order-payment-${order.lot_id}-${viewerId}`)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${viewerId}` }, payload => {
+        if (payload.new.lot_id === order.lot_id && paymentNotices.has(payload.new.kind)) refresh();
+      }).subscribe();
+    const onVisible = () => { if (document.visibilityState === "visible") refresh(); };
+    const onPageShow = (event: PageTransitionEvent) => { if (event.persisted) refresh(); };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("pageshow", onPageShow);
+    window.addEventListener("online", onVisible);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("pageshow", onPageShow);
+      window.removeEventListener("online", onVisible);
+      void client.removeChannel(channel);
+    };
+  }, [legacy, order.lot_id, router, viewerId]);
   useEffect(() => {
     if (!processing) return;
     let remaining = 5;
@@ -91,7 +122,8 @@ export function OrderManagement({ order, buyer, addresses, events, checkoutUnava
     }, 4000);
     return () => window.clearInterval(timer);
   }, [processing, router]);
-  const paymentLabel = processing ? "Payment processing" : order.payment_state === "PENDING" ? "Checkout in progress" :
+  const paymentLabel = processing ? "Payment processing" : order.payment_state === "PAID" ? "Payment Confirmed" :
+    checkout?.kind === "retry" ? "Checkout expired" : order.payment_state === "PENDING" ? "Checkout in progress" :
     order.payment_state === "UNPAID" ? "Unpaid" : order.payment_state === "FAILED" ?
       (order.fulfilment_method ? "Payment failed" : "Checkout expired") : paymentLabels[order.payment_state];
   const validAddress = isUuid(address) && addresses.some(item => item.id === address);
@@ -116,7 +148,10 @@ export function OrderManagement({ order, buyer, addresses, events, checkoutUnava
       {order.refunded_minor > 0 && <p className="text-sm">Refunded · {formatCurrency(order.refunded_minor / 100)}</p>}
       {order.fulfilment_method && order.winning_minor != null && order.postage_minor != null &&
         <p className="text-sm">Order total · {formatCurrency((order.winning_minor + order.postage_minor) / 100)}</p>}
-      {legacy && <p className="text-sm text-auction-muted">Online checkout is unavailable for this order because verified delivery or collection terms are missing. Contact {buyer ? "the seller" : "the buyer"} about the original arrangements.</p>}
+      {checkoutBlock && <p className="text-sm text-auction-muted">{checkoutBlock}</p>}
+      {legacy && <p className="text-sm text-auction-muted">Online checkout is unavailable for this order because verified delivery or collection terms are missing. {order.version === 0 ?
+        "Support can review the order if the original terms and outstanding balance can be verified." :
+        "Ask support to review the fulfilment history and any prior payments before arranging payment."}</p>}
       {terms && <div className="space-y-2 text-sm">
         <h3 className="font-semibold">Agreed listing terms</h3>
         {terms.mode !== "collection" && <p className="break-words">
@@ -180,8 +215,8 @@ export function OrderManagement({ order, buyer, addresses, events, checkoutUnava
     </>;
 
   return <div className="grid gap-5 lg:grid-cols-2">
-    {canCheckout ? <OrderCheckout key={order.fulfilment_method ?? "new"} order={order} addresses={addresses}
-      unavailable={checkoutUnavailable} processing={processing}>{progress}</OrderCheckout> : progress(null)}
+    {checkout ? <OrderCheckout key={order.fulfilment_method ?? "new"} order={order} addresses={addresses}
+      addressUnavailable={addressUnavailable} checkout={checkout}>{progress}</OrderCheckout> : progress(null)}
     <section className="premium-card rounded-lg p-5 lg:col-span-2">
       <h2 className="font-semibold">Order activity</h2>
       <ol className="mt-3 space-y-2 text-sm text-auction-muted">{events.map(event =>

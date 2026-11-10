@@ -34,6 +34,7 @@ let stripeAttempt = null;
 let stripeCaptured = false;
 let stripeExpired = false;
 let stripeMapped = true;
+let stripeReady = true;
 let stripeSession = null;
 let stripeSessionCount = 0;
 let stripeEvents = new Set();
@@ -75,7 +76,7 @@ const server = createServer(async (req, res) => {
   if (url.pathname.startsWith('/_test/stripe/v1/')) {
     if (req.headers.authorization !== 'Bearer sk_test_browser_fixture') return reply({ error: { message: 'Invalid fixture key' } }, 403);
     if (url.pathname.endsWith(`/accounts/${stripeAccount}`)) return reply({
-      id: stripeAccount, country: 'GB', details_submitted: true, charges_enabled: true,
+      id: stripeAccount, country: 'GB', details_submitted: stripeReady, charges_enabled: stripeReady,
       payouts_enabled: true, capabilities: { card_payments: 'active' },
     });
     if (!stripeAttempt || req.headers['stripe-account'] !== stripeAccount) return reply({ error: { message: 'Invalid fixture scope' } }, 403);
@@ -111,7 +112,7 @@ const server = createServer(async (req, res) => {
     const state = JSON.parse(Buffer.concat(chunks).toString() || '{}');
     if (state.mode === 'empty') { lots = []; images = []; rooms = [room]; accountsEnabled = false; notifications = []; watchlist = []; photoObjects = new Map(); listingTerms.clear(); failUpload = false; uploadsBeforeFailure = null; loseSubmitResponse = false; }
     if (state.mode === 'transactions' || state.mode === 'checkout') {
-      stripeAttempt=null;stripeEvents=new Set();stripeCaptured=false;stripeExpired=false;stripeMapped=true;stripeSession=null;stripeSessionCount=0;notifications=[];
+      stripeAttempt=null;stripeEvents=new Set();stripeCaptured=false;stripeExpired=false;stripeMapped=true;stripeReady=true;stripeSession=null;stripeSessionCount=0;notifications=[];
       accountsEnabled=true;rooms=[room];lots=[{...createLot('SOLD'),seller_id:accountB,highest_bidder_id:accountA,winning_bid:275,sold_at:new Date().toISOString()}];
       addressRows=[];messageRows=[];eventRows=[];
       orderRows=[{id:'50000000-0000-0000-0000-000000000001',lot_id:id,buyer_id:accountA,seller_id:accountB,preview_started_at:new Date().toISOString(),created_at:new Date().toISOString(),version:0,payment_state:'NOT_RECORDED',shipping_state:'AWAITING_ADDRESS',address_snapshot:null,service:'',tracking:'',delivery_notes:'',dispatched_at:null,buyer_received_at:null,seller_delivery_reported_at:null}];
@@ -126,6 +127,7 @@ const server = createServer(async (req, res) => {
     if (state.captureStripe) stripeCaptured = true;
     if (state.expireStripe) stripeExpired = true;
     if (state.stripeMapped !== undefined) stripeMapped = state.stripeMapped;
+    if (state.stripeReady !== undefined) stripeReady = state.stripeReady;
     if (state.mode === 'seller') {
       accountsEnabled = true;
       rooms = [room, jewellery, ...['Watch','Art','Design','Dining','Music','Technology','Collectables','Fashion','Motoring','Sport'].map((name,index) => ({ ...room, id: `10000000-0000-0000-0000-0000000000${String(index+20).padStart(2,'0')}`, slug: `${name.toLowerCase()}-room`, name: `The ${name} Room`, display_order: index+20 }))];

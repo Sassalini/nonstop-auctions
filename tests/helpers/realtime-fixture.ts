@@ -14,6 +14,10 @@ export class RealtimeFixture {
   private sequence = 0;
   private arrayProtocol = new Map<WebSocketRoute, boolean>();
 
+  hasChannel(name: string) {
+    return [...this.sockets.values()].some(channels => channels.has(`realtime:${name}`));
+  }
+
   async attach(context: BrowserContext) {
     await context.routeWebSocket(/\/realtime\/v1\/websocket/, socket => {
       this.sockets.set(socket, new Map());
@@ -78,18 +82,18 @@ export class RealtimeFixture {
     }
   }
 
-  emit(table: string, record: Record<string, unknown> = {}) {
+  emit(table: string, record: Record<string, unknown> = {}, event: 'INSERT' | 'UPDATE' = 'UPDATE') {
     for (const [socket, channels] of this.sockets) {
       for (const [topic, channel] of channels) {
         const ids = channel.bindings.filter(binding => {
-          if (binding.table !== table) return false;
+          if (binding.table !== table || (binding.event !== '*' && binding.event !== event)) return false;
           if (!binding.filter) return true;
           const [column, value] = binding.filter.split('=eq.');
           return String(record[column]) === value;
         })
           .map(binding => binding.id);
         if (ids.length) this.send(socket, { topic, event: 'postgres_changes', join_ref: channel.ref, payload: {
-          ids, data: { schema: 'public', table, type: 'UPDATE', commit_timestamp: new Date().toISOString(), columns: [], record, old_record: {}, errors: null },
+          ids, data: { schema: 'public', table, type: event, commit_timestamp: new Date().toISOString(), columns: [], record, old_record: {}, errors: null },
         } });
       }
     }

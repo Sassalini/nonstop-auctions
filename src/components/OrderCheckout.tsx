@@ -5,18 +5,20 @@ import { useRouter } from "next/navigation";
 import { useRef, useState, type ReactNode } from "react";
 import { startTestCheckout } from "@/app/checkout-actions";
 import { formatCurrency } from "@/lib/format";
-import { eligibleDeliveryAddress, isUuid, type DeliveryAddress, type FulfilmentMethod, type FulfilmentOrder } from "@/lib/transactions";
+import { eligibleDeliveryAddress, isUuid, type BuyerCheckoutStatus, type DeliveryAddress, type FulfilmentMethod, type FulfilmentOrder } from "@/lib/transactions";
 import { buttonStyle, inputStyle } from "./TransactionControls";
 
 const formId = "order-checkout-form";
 
-export function OrderCheckout({ order, addresses, unavailable, processing, children }: {
-  order: FulfilmentOrder; addresses: DeliveryAddress[]; unavailable: string | null; processing: boolean;
+export function OrderCheckout({ order, addresses, addressUnavailable, checkout, children }: {
+  order: FulfilmentOrder; addresses: DeliveryAddress[]; addressUnavailable: boolean; checkout: BuyerCheckoutStatus;
   children: (paymentPrompt: ReactNode) => ReactNode;
 }) {
   const router = useRouter();
   const terms = order.terms_snapshot;
   const locked = Boolean(order.fulfilment_method);
+  const processing = checkout.kind === "processing";
+  const unavailable = checkout.kind === "unavailable" ? checkout.reason : null;
   const [method, setMethod] = useState<FulfilmentMethod>(order.fulfilment_method ?? (terms?.mode === "collection" ? "collection" : "delivery"));
   const eligible = terms ? addresses.filter(item => eligibleDeliveryAddress(item.details, terms)) : [];
   const [address, setAddress] = useState(eligible.find(item => item.is_default)?.id ?? eligible[0]?.id ?? "");
@@ -29,10 +31,14 @@ export function OrderCheckout({ order, addresses, unavailable, processing, child
   const total = order.winning_minor + postage;
   const validTotal = total >= 30 && total <= 99999999;
   const needsAddress = !locked && method === "delivery" && !eligible.some(item => isUuid(item.id) && item.id === address);
-  const requirement = unavailable ?? (!validTotal ? "This total is outside the supported card payment range." :
-    needsAddress ? "Please select a delivery address" : null);
-  const label = busy ? "Opening Stripe Checkout…" : locked ?
-    (order.payment_state === "FAILED" ? "Retry payment" : "Resume checkout") : "Pay Now with Stripe";
+  const requirement = unavailable ?? (!validTotal ? "This total is outside the supported card payment range." : needsAddress ?
+    (addressUnavailable ? "Saved addresses couldn’t be loaded. Refresh the order or select collection if offered." : "Please select a delivery address") : null);
+  const label = busy ? "Checking Stripe Checkout…" : checkout.kind === "continue" ? "Continue Payment" :
+    (checkout.kind === "retry" || checkout.kind === "recover") ? "Retry Payment" : "Pay Now with Stripe";
+  const prompt = checkout.kind === "continue" ? "Continue the same Stripe checkout using your selected fulfilment details." :
+    checkout.kind === "recover" ? "Stripe checkout was interrupted. Retry to recover the same payment attempt." :
+    checkout.kind === "retry" && locked ? "This checkout expired. Verify the expiry to choose your fulfilment details and pay again." :
+    "Pay securely with Stripe to start fulfilment.";
   const action = (className: string) => !unavailable && !processing && <button type="submit" form={formId}
     disabled={busy || !validTotal || needsAddress} aria-describedby="checkout-requirement" className={className}>{label}</button>;
   return <>
@@ -64,7 +70,7 @@ export function OrderCheckout({ order, addresses, unavailable, processing, child
             <dt className="font-semibold">Total payable</dt><dd className="font-semibold">{formatCurrency(total / 100)}</dd>
           </dl>
           {action("min-h-11 w-full rounded bg-auction-gold px-5 py-3 font-semibold text-black hover:brightness-110 focus-visible:outline-auction-ivory disabled:opacity-50 sm:w-auto")}
-          <p id="checkout-requirement" className="text-sm text-auction-muted">{requirement ?? "Stripe test mode. Use a test card."}</p>
+          <p id="checkout-requirement" className="text-sm text-auction-muted">{processing ? "Waiting for Stripe to confirm your payment." : requirement ?? "Stripe test mode. Use a test card."}</p>
           {error && <p id="checkout-error" role="alert" className="text-sm text-auction-ember">{error}</p>}
         </div>
         <fieldset disabled={busy || processing} className="min-w-0 space-y-3">
@@ -91,12 +97,11 @@ export function OrderCheckout({ order, addresses, unavailable, processing, child
             <Link prefetch={false} className="inline-block text-sm text-auction-gold underline" href={`/account/addresses?order=${order.lot_id}#add-address`}>Add New Address</Link>
             <p className="text-sm text-auction-muted">Paying confirms this delivery address. The seller receives it after payment is verified.</p>
           </div>}
-          {locked && !processing && <p className="text-sm text-auction-muted">Resume the same checkout with the method and address already selected. If it expired, we’ll verify that before you can start again.</p>}
         </fieldset>
       </form>
     </section>
     {children(!processing && <div className="space-y-2 border-t border-white/10 pt-4">
-      <p className="text-sm text-auction-muted">{requirement ?? (locked ? "Resume your existing Stripe checkout." : "Pay securely with Stripe to start fulfilment.")}</p>
+      <p className="text-sm text-auction-muted">{requirement ?? prompt}</p>
       {action(buttonStyle)}
       {error && <a className="block text-sm text-auction-gold underline" href="#checkout-error">View the checkout message</a>}
     </div>)}

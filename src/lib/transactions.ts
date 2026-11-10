@@ -12,6 +12,9 @@ export type FulfilmentTerms = {
   collection_area?: string;
 };
 export type PaymentState = "NOT_RECORDED" | "UNPAID" | "PENDING" | "PAID" | "FAILED" | "PARTIALLY_REFUNDED" | "REFUNDED" | "DISPUTED";
+export type BuyerCheckoutStatus =
+  | { kind: "pay" | "continue" | "retry" | "recover" | "processing" }
+  | { kind: "unavailable"; reason: string };
 export const paymentLabels: Record<PaymentState, string> = {
   NOT_RECORDED: "Payment not recorded",
   UNPAID: "Awaiting payment",
