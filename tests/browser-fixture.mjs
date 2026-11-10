@@ -11,12 +11,14 @@ let rooms = [room];
 let accountsEnabled = false;
 const accountA = '00000000-0000-0000-0000-000000000102';
 const accountB = '00000000-0000-0000-0000-000000000103';
+const accountC = '00000000-0000-0000-0000-000000000104';
 let notifications = [];
 let watchlist = [];
-const user = id => ({ id, email: `${id === accountA ? 'one' : 'two'}@example.test`, aud: 'authenticated', role: 'authenticated', app_metadata: {}, user_metadata: {}, created_at: new Date().toISOString() });
+const accountEmails = { [accountA]: 'one@example.test', [accountB]: 'two@example.test', [accountC]: 'three@example.test' };
+const user = id => ({ id, email: accountEmails[id], aud: 'authenticated', role: 'authenticated', app_metadata: {}, user_metadata: {}, created_at: new Date().toISOString() });
 const accessToken = id => `${Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url')}.${Buffer.from(JSON.stringify({ sub: id, role: 'authenticated', aud: 'authenticated', exp: Math.floor(Date.now()/1000)+3600 })).toString('base64url')}.fixture-signature`;
 function requestAccount(req) {
-  try { const id = JSON.parse(Buffer.from(req.headers.authorization?.split('.')[1] ?? '', 'base64url').toString()).sub; return [accountA,accountB].includes(id) ? id : null; } catch { return null; }
+  try { const id = JSON.parse(Buffer.from(req.headers.authorization?.split('.')[1] ?? '', 'base64url').toString()).sub; return Object.hasOwn(accountEmails, id) ? id : null; } catch { return null; }
 }
 const id = '20000000-0000-0000-0000-000000000701';
 let lots = [];
@@ -27,12 +29,13 @@ let photoObjects = new Map();
 let failUpload = false;
 let uploadsBeforeFailure = null;
 let loseSubmitResponse = false;
-const stripeAttemptId = '70000000-0000-0000-0000-000000000001';
-const stripeSessionId = 'cs_test_browser_fixture';
 const stripeAccount = 'acct_browserFixture';
 let stripeAttempt = null;
 let stripeCaptured = false;
-let stripeSessionOpen = false;
+let stripeExpired = false;
+let stripeMapped = true;
+let stripeSession = null;
+let stripeSessionCount = 0;
 let stripeEvents = new Set();
 const createLot = (status = 'PREVIEW') => ({
   relist_unlimited:false,max_auto_relistings:5,auto_relistings_used:0,completed_attempts:0,
@@ -78,29 +81,37 @@ const server = createServer(async (req, res) => {
     if (!stripeAttempt || req.headers['stripe-account'] !== stripeAccount) return reply({ error: { message: 'Invalid fixture scope' } }, 403);
     if (req.method === 'POST' && url.pathname.endsWith('/checkout/sessions')) {
       const form = new URLSearchParams(await readBody());
-      if (req.headers['idempotency-key'] !== `nonstop-test-checkout-${stripeAttemptId}` ||
-        form.get('line_items[0][price_data][unit_amount]') !== String(stripeAttempt.total_minor) ||
+      if (req.headers['idempotency-key'] !== `nonstop-test-checkout-${stripeAttempt.id}` ||
+        form.get('line_items[0][price_data][unit_amount]') !== String(stripeAttempt.total_minor - stripeAttempt.postage_minor) ||
+        form.get('line_items[1][price_data][unit_amount]') !== (stripeAttempt.postage_minor ? String(stripeAttempt.postage_minor) : null) ||
         form.get('line_items[0][price_data][currency]') !== 'gbp' ||
-        form.get('metadata[nonstop_test_attempt]') !== stripeAttemptId) return reply({ error: { message: 'Invalid fixture session' } }, 400);
-      stripeSessionOpen = true;
-    } else if (!stripeSessionOpen || !url.pathname.endsWith(`/checkout/sessions/${stripeSessionId}`)) {
+        (stripeAttempt.postage_minor && form.get('line_items[1][price_data][currency]') !== 'gbp') ||
+        form.get('allowed_payment_method_types[0]') !== 'card' ||
+        form.get('metadata[nonstop_test_attempt]') !== stripeAttempt.id) return reply({ error: { message: 'Invalid fixture session' } }, 400);
+      stripeSession ??= {
+        id: `cs_test_browser_fixture_${++stripeSessionCount}`,
+        successUrl: form.get('success_url'), cancelUrl: form.get('cancel_url'),
+      };
+    } else if (!stripeSession || !url.pathname.endsWith(`/checkout/sessions/${stripeSession.id}`)) {
       return reply({ error: { message: 'Unknown fixture session' } }, 404);
     }
-    const metadata = { nonstop_test_attempt: stripeAttemptId };
-    return reply({ id: stripeSessionId, livemode: false, mode: 'payment', currency: 'gbp', metadata, amount_total: stripeAttempt.total_minor,
-      status: stripeCaptured ? 'complete' : 'open', payment_status: stripeCaptured ? 'paid' : 'unpaid',
-      payment_method_types: ['card'], url: `https://checkout.stripe.com/c/pay/${stripeSessionId}`,
+    const metadata = { nonstop_test_attempt: stripeAttempt.id };
+    return reply({ id: stripeSession.id, livemode: false, mode: 'payment', currency: 'gbp', metadata, amount_total: stripeAttempt.total_minor,
+      status: stripeCaptured ? 'complete' : stripeExpired ? 'expired' : 'open', payment_status: stripeCaptured ? 'paid' : 'unpaid',
+      payment_method_types: ['card'], url: `https://checkout.stripe.com/c/pay/${stripeSession.id}`,
       payment_intent: stripeCaptured ? { id: 'pi_browser_fixture', livemode: false, currency: 'gbp', status: 'succeeded',
         amount: stripeAttempt.total_minor, amount_received: stripeAttempt.total_minor, metadata } : null,
     });
   }
+  if (url.pathname === '/_test/checkout') return reply({ session: stripeSession, attempt: stripeAttempt, sessions: stripeSessionCount,
+    orderPaidNotifications: notifications.filter(item => item.user_id === accountB && item.lot_id === id && item.kind === 'ORDER_PAID').length });
   if (url.pathname === '/_test/listing-terms') return reply(listingTerms.get(url.searchParams.get('lot')) ?? null);
   if (url.pathname === '/_test/state') {
     const chunks = []; for await (const chunk of req) chunks.push(chunk);
     const state = JSON.parse(Buffer.concat(chunks).toString() || '{}');
     if (state.mode === 'empty') { lots = []; images = []; rooms = [room]; accountsEnabled = false; notifications = []; watchlist = []; photoObjects = new Map(); listingTerms.clear(); failUpload = false; uploadsBeforeFailure = null; loseSubmitResponse = false; }
     if (state.mode === 'transactions' || state.mode === 'checkout') {
-      stripeAttempt=null;stripeEvents=new Set();stripeCaptured=false;stripeSessionOpen=false;
+      stripeAttempt=null;stripeEvents=new Set();stripeCaptured=false;stripeExpired=false;stripeMapped=true;stripeSession=null;stripeSessionCount=0;notifications=[];
       accountsEnabled=true;rooms=[room];lots=[{...createLot('SOLD'),seller_id:accountB,highest_bidder_id:accountA,winning_bid:275,sold_at:new Date().toISOString()}];
       addressRows=[];messageRows=[];eventRows=[];
       orderRows=[{id:'50000000-0000-0000-0000-000000000001',lot_id:id,buyer_id:accountA,seller_id:accountB,preview_started_at:new Date().toISOString(),created_at:new Date().toISOString(),version:0,payment_state:'NOT_RECORDED',shipping_state:'AWAITING_ADDRESS',address_snapshot:null,service:'',tracking:'',delivery_notes:'',dispatched_at:null,buyer_received_at:null,seller_delivery_reported_at:null}];
@@ -113,6 +124,8 @@ const server = createServer(async (req, res) => {
       conversationRows=[{id:'60000000-0000-0000-0000-000000000001',lot_id:id,buyer_id:accountA,seller_id:accountB,created_at:new Date().toISOString(),buyer_read_at:new Date().toISOString(),seller_read_at:new Date().toISOString()}];
     }
     if (state.captureStripe) stripeCaptured = true;
+    if (state.expireStripe) stripeExpired = true;
+    if (state.stripeMapped !== undefined) stripeMapped = state.stripeMapped;
     if (state.mode === 'seller') {
       accountsEnabled = true;
       rooms = [room, jewellery, ...['Watch','Art','Design','Dining','Music','Technology','Collectables','Fashion','Motoring','Sport'].map((name,index) => ({ ...room, id: `10000000-0000-0000-0000-0000000000${String(index+20).padStart(2,'0')}`, slug: `${name.toLowerCase()}-room`, name: `The ${name} Room`, display_order: index+20 }))];
@@ -271,7 +284,7 @@ const server = createServer(async (req, res) => {
   if (url.pathname.endsWith('/rpc/advance_room_lifecycle')) { const data = await body(); return reply(lots.find(lot => lot.room_id === data.p_room_id && ['PREVIEW','FIRST_BID_WINDOW','ACTIVE_BIDDING'].includes(lot.status)) ?? null); }
   if (url.pathname.endsWith('/rpc/lot_watchlist_count')) { const data = await body(); return reply(watchlist.filter(item => item.lot_id === data.p_lot_id).length); }
   if (accountsEnabled && url.pathname === '/auth/v1/token') {
-    const data = await body(); const account = data.email === 'one@example.test' ? accountA : data.email === 'two@example.test' ? accountB : null;
+    const data = await body(); const account = Object.keys(accountEmails).find(id => accountEmails[id] === data.email);
     if (account) return reply({ access_token: accessToken(account), refresh_token: `fixture-${account}`, token_type: 'bearer', expires_in: 3600, user: user(account) });
   }
   if (accountsEnabled && url.pathname === '/auth/v1/user') { const account = requestAccount(req); if (account) return reply(user(account)); }
@@ -279,7 +292,7 @@ const server = createServer(async (req, res) => {
   if (url.pathname.startsWith('/auth/v1/')) return reply({ code: 'invalid_credentials', msg: 'Invalid login credentials' }, 400);
   const account = requestAccount(req);
   if (req.headers.authorization === 'Bearer service_role_browser_fixture') {
-    if (url.pathname.endsWith('/seller_stripe_test_accounts')) return reply([{ stripe_account: stripeAccount }]);
+    if (url.pathname.endsWith('/seller_stripe_test_accounts')) return reply(stripeMapped ? [{ seller_id: accountB, stripe_account: stripeAccount }] : []);
     if (url.pathname.endsWith('/stripe_checkout_attempts')) return reply(stripeAttempt ? [stripeAttempt] : []);
     if (url.pathname.endsWith('/stripe_payment_events')) {
       const event = url.searchParams.get('id')?.slice(3);
@@ -288,28 +301,41 @@ const server = createServer(async (req, res) => {
     if (url.pathname.endsWith('/rpc/reserve_test_checkout')) {
       const data = await body();
       const order = orderRows.find(item => item.id === data.p_order && item.buyer_id === data.p_buyer);
-      if (!order || data.p_account !== stripeAccount || data.p_method !== 'collection') return reply({ message: 'Invalid fixture order' }, 400);
-      stripeAttempt ??= { id: stripeAttemptId, order_id: order.id, stripe_account: stripeAccount, session_id: null,
-        method: 'collection', postage_minor: 0, total_minor: order.winning_minor, created_at: new Date().toISOString() };
-      Object.assign(order, { payment_state: 'PENDING', fulfilment_method: 'collection', postage_minor: 0 });
+      if (!order || order.shipping_state !== 'AWAITING_PAYMENT' || data.p_account !== stripeAccount || !['delivery', 'collection'].includes(data.p_method)) {
+        return reply({ message: 'Invalid fixture order' }, 400);
+      }
+      if (stripeAttempt) return reply(stripeAttempt);
+      const address = addressRows.find(item => item.id === data.p_address && item.user_id === data.p_buyer);
+      const postage = data.p_method === 'delivery' ? order.terms_snapshot.postage_minor : 0;
+      if (data.p_method === 'delivery' && !address) return reply({ code: 'P0001', message: 'Choose your own saved address' }, 400);
+      stripeAttempt = { id: randomUUID(), order_id: order.id, stripe_account: stripeAccount, session_id: null,
+        method: data.p_method, postage_minor: postage, total_minor: order.winning_minor + postage,
+        pending_address: address?.details ?? null, created_at: new Date().toISOString() };
+      Object.assign(order, { payment_state: 'PENDING', fulfilment_method: data.p_method, postage_minor: postage });
       return reply(stripeAttempt);
     }
     if (url.pathname.endsWith('/rpc/bind_test_checkout')) {
       const data = await body();
-      if (data.p_attempt !== stripeAttempt?.id || data.p_session !== stripeSessionId) return reply(false);
+      if (data.p_attempt !== stripeAttempt?.id || data.p_session !== stripeSession?.id) return reply(false);
       stripeAttempt.session_id = data.p_session;
       return reply(true);
     }
     if (url.pathname.endsWith('/rpc/record_test_payment')) {
       const data = await body();
       const order = orderRows.find(item => item.id === stripeAttempt?.order_id);
-      if (!order || data.p_attempt !== stripeAttempt.id || data.p_session !== stripeSessionId ||
-        data.p_intent !== 'pi_browser_fixture' || data.p_total !== stripeAttempt.total_minor || data.p_kind !== 'paid') {
+      if (!order || data.p_attempt !== stripeAttempt.id || data.p_session !== stripeSession?.id || data.p_total !== stripeAttempt.total_minor) {
         return reply({ message: 'Invalid fixture event' }, 400);
       }
-      if (stripeEvents.has(data.p_event)) return reply({ message: 'Duplicate fixture write' }, 409);
+      if (stripeEvents.has(data.p_event)) return reply(null);
       stripeEvents.add(data.p_event);
-      Object.assign(order, { payment_state: 'PAID', shipping_state: 'PREPARING_COLLECTION' });
+      if (data.p_kind === 'expired' && stripeExpired && !stripeCaptured) {
+        Object.assign(order, { payment_state: 'FAILED', fulfilment_method: null, postage_minor: null });
+        stripeAttempt = null; stripeSession = null; stripeExpired = false;
+      } else if (data.p_kind === 'paid' && data.p_intent === 'pi_browser_fixture' && stripeCaptured && order.payment_state !== 'PAID') {
+        Object.assign(order, { payment_state: 'PAID', shipping_state: stripeAttempt.method === 'collection' ? 'PREPARING_COLLECTION' : 'AWAITING_DISPATCH',
+          address_snapshot: stripeAttempt.pending_address });
+        notifications.push({ id: randomUUID(), user_id: accountB, lot_id: id, kind: 'ORDER_PAID', lot_title: lots[0].title, created_at: new Date().toISOString(), read_at: null });
+      }
       return reply(null);
     }
   }

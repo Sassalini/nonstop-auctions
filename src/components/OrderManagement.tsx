@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { transactionAction } from "@/app/transaction-actions";
 import { formatCurrency } from "@/lib/format";
-import { fulfilmentLabel, fulfilmentLabels, paymentLabels, type DeliveryAddress, type FulfilmentOrder, type FulfilmentEvent } from "@/lib/transactions";
+import { fulfilmentLabel, fulfilmentLabels, isCheckoutOrder, isUuid, paymentLabels, type DeliveryAddress, type FulfilmentOrder, type FulfilmentEvent } from "@/lib/transactions";
 import { OrderCheckout } from "./OrderCheckout";
 import { buttonStyle, inputStyle, TransactionButton } from "./TransactionControls";
 
@@ -67,10 +67,11 @@ function SellerFulfilmentForm({ order, collection, legacy }: { order: Fulfilment
   </form>;
 }
 
-export function OrderManagement({ order, buyer, addresses, events, checkoutEnabled, returned }: {
+export function OrderManagement({ order, buyer, addresses, events, checkoutUnavailable, returned }: {
   order: FulfilmentOrder; buyer: boolean; addresses: DeliveryAddress[]; events: FulfilmentEvent[];
-  checkoutEnabled: boolean; returned: boolean;
+  checkoutUnavailable: string | null; returned: boolean;
 }) {
+  const router = useRouter();
   const [address, setAddress] = useState(addresses.find(item => item.is_default)?.id ?? addresses[0]?.id ?? "");
   const [reason, setReason] = useState("");
   const terms = order.terms_snapshot;
@@ -79,24 +80,43 @@ export function OrderManagement({ order, buyer, addresses, events, checkoutEnabl
   const shipping = order.shipping_state;
   const paid = order.payment_state === "PAID" || order.payment_state === "PARTIALLY_REFUNDED";
   const canFulfil = (paid || legacy) && shipping !== "CANCELLED";
-  const canCheckout = buyer && terms && shipping === "AWAITING_PAYMENT" && order.winning_minor != null &&
-    ["UNPAID", "PENDING", "FAILED"].includes(order.payment_state);
+  const canCheckout = buyer && isCheckoutOrder(order);
+  const processing = returned && canCheckout && Boolean(order.fulfilment_method);
+  useEffect(() => {
+    if (!processing) return;
+    let remaining = 5;
+    const timer = window.setInterval(() => {
+      router.refresh();
+      if (--remaining === 0) window.clearInterval(timer);
+    }, 4000);
+    return () => window.clearInterval(timer);
+  }, [processing, router]);
+  const paymentLabel = processing ? "Payment processing" : order.payment_state === "PENDING" ? "Checkout in progress" :
+    order.payment_state === "UNPAID" ? "Unpaid" : order.payment_state === "FAILED" ?
+      (order.fulfilment_method ? "Payment failed" : "Checkout expired") : paymentLabels[order.payment_state];
+  const validAddress = isUuid(address) && addresses.some(item => item.id === address);
   const payload = { order: order.id, version: order.version };
   const link = carrierTrackingLink(order.service, order.tracking);
   const canConfirmReceipt = buyer && canFulfil && !collection && (shipping === "DISPATCHED" ||
     (legacy && shipping === "COLLECTION_ARRANGED") || (shipping === "EXCEPTION" && Boolean(order.dispatched_at)));
   const confirmed = collection ? "Collected" : fulfilmentLabels.DELIVERED;
 
-  return <div className="grid gap-5 lg:grid-cols-2">
+  const progress = (paymentPrompt: ReactNode) => <>
     <section className="premium-card min-w-0 space-y-4 rounded-lg p-5">
       <h2 className="text-lg font-semibold">Order progress</h2>
-      <p className="text-sm">Payment · {paymentLabels[order.payment_state]}</p>
+      <p className="text-sm">Payment · <span className={`rounded-full border px-2.5 py-1 font-semibold ${paid ? "border-auction-gold/50 bg-auction-gold/10 text-auction-gold" : "border-white/20 bg-black/40 text-auction-ivory"}`}>{paymentLabel}</span></p>
       <p className="text-sm">Fulfilment · {fulfilmentLabel(order)}</p>
-      {returned && canCheckout && <p role="status" className="text-sm text-auction-gold">Waiting for Stripe confirmation. Refresh this page to check for an update.</p>}
+      {processing && <div role="status" className="space-y-2 text-sm text-auction-gold">
+        <p>Waiting for verified payment confirmation from Stripe.</p>
+        <button type="button" onClick={() => router.refresh()} className={buttonStyle}>Check payment status</button>
+      </div>}
+      {order.payment_state === "PAID" && <p className="text-sm text-auction-muted">Stripe confirmed payment. Follow the fulfilment updates here.</p>}
+      {order.payment_state === "REFUNDED" && <p className="text-sm text-auction-muted">Stripe recorded a full refund. Contact the other party if you need help with the order.</p>}
+      {order.payment_state === "DISPUTED" && <p className="text-sm text-auction-muted">Fulfilment updates are paused. Check with {buyer ? "your card issuer" : "Stripe"} for the dispute status.</p>}
       {order.refunded_minor > 0 && <p className="text-sm">Refunded · {formatCurrency(order.refunded_minor / 100)}</p>}
       {order.fulfilment_method && order.winning_minor != null && order.postage_minor != null &&
         <p className="text-sm">Order total · {formatCurrency((order.winning_minor + order.postage_minor) / 100)}</p>}
-      {legacy && <p className="text-sm text-auction-muted">This sale predates online checkout. Its existing fulfilment history is available here.</p>}
+      {legacy && <p className="text-sm text-auction-muted">Online checkout is unavailable for this order because verified delivery or collection terms are missing. Contact {buyer ? "the seller" : "the buyer"} about the original arrangements.</p>}
       {terms && <div className="space-y-2 text-sm">
         <h3 className="font-semibold">Agreed listing terms</h3>
         {terms.mode !== "collection" && <p className="break-words">
@@ -113,15 +133,16 @@ export function OrderManagement({ order, buyer, addresses, events, checkoutEnabl
             .map(key => order.address_snapshot?.[key]).filter(Boolean).join("\n")}
         </address> : <p className="text-sm">No address confirmed.</p>}
       </>}
-      {legacy && buyer && ["AWAITING_ADDRESS", "AWAITING_DISPATCH"].includes(shipping) && !order.dispatched_at && <div className="space-y-3">
+      {legacy && buyer && !collection && ["AWAITING_ADDRESS", "AWAITING_DISPATCH"].includes(shipping) && !order.dispatched_at && <div className="space-y-3">
         <label className="block text-sm">Select or correct delivery address
           <select className={`${inputStyle} mt-2`} value={address} onChange={event => setAddress(event.target.value)}>
             <option value="">Choose an address</option>
             {addresses.map(item => <option key={item.id} value={item.id}>{item.details.recipient} · {item.details.line1} · {item.details.postcode}</option>)}
           </select>
         </label>
-        <TransactionButton action="select_address" payload={{ ...payload, address }}>Confirm order address</TransactionButton>
-        <Link className="block text-sm text-auction-gold underline" href="/account/addresses">Manage delivery addresses</Link>
+        <TransactionButton action="select_address" disabled={!validAddress} payload={{ ...payload, address: validAddress ? address : null }}>Confirm order address</TransactionButton>
+        {!validAddress && <p className="text-sm text-auction-muted">Please select a delivery address</p>}
+        <Link className="block text-sm text-auction-gold underline" href={`/account/addresses?order=${order.lot_id}#add-address`}>{addresses.length ? "Manage delivery addresses" : "Add New Address"}</Link>
         <p className="text-xs text-auction-muted">Corrections notify the seller and are locked after dispatch.</p>
       </div>}
       <TransactionButton action="conversation" payload={{ lot: order.lot_id }}>Contact {buyer ? "seller" : "buyer"}</TransactionButton>
@@ -129,6 +150,7 @@ export function OrderManagement({ order, buyer, addresses, events, checkoutEnabl
       {collection && buyer && canFulfil && shipping !== "DELIVERED" && order.seller_handover_at &&
         <TransactionButton action="collection_confirm" payload={payload}>Confirm I collected this item</TransactionButton>}
       {order.buyer_received_at && <p className="text-sm">{confirmed} on {orderTime(order.buyer_received_at)}.</p>}
+      {paymentPrompt}
     </section>
 
     <section className="premium-card min-w-0 space-y-4 rounded-lg p-5">
@@ -155,7 +177,11 @@ export function OrderManagement({ order, buyer, addresses, events, checkoutEnabl
         <p className="mt-2 text-xs text-auction-muted">Recorded for manual review. Refunds and payment disputes are handled separately.</p>
       </details>
     </section>
-    {canCheckout && <OrderCheckout key={order.fulfilment_method ?? "new"} order={order} addresses={addresses} enabled={checkoutEnabled} />}
+    </>;
+
+  return <div className="grid gap-5 lg:grid-cols-2">
+    {canCheckout ? <OrderCheckout key={order.fulfilment_method ?? "new"} order={order} addresses={addresses}
+      unavailable={checkoutUnavailable} processing={processing}>{progress}</OrderCheckout> : progress(null)}
     <section className="premium-card rounded-lg p-5 lg:col-span-2">
       <h2 className="font-semibold">Order activity</h2>
       <ol className="mt-3 space-y-2 text-sm text-auction-muted">{events.map(event =>

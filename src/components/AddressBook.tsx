@@ -50,11 +50,11 @@ export function AddressBook({ addresses }: { addresses: DeliveryAddress[] }) {
         ))}
         {!addresses.length ? <p className="text-sm text-auction-muted">No saved addresses yet. Add your first delivery address.</p> : null}
       </div>
-      <form className="premium-card min-w-0 rounded-lg p-5" onSubmit={async event => {
+      <form id="add-address" className="premium-card min-w-0 rounded-lg p-5" onSubmit={async event => {
         event.preventDefault();
         setBusy(true); setError(""); setStatus("");
         try {
-          const result = await transactionAction("save_address", { id: editing?.id ?? "", details, default: isDefault });
+          const result = await transactionAction("save_address", { id: editing?.id ?? null, details, default: isDefault });
           if (result.error) setError(result.error);
           else { resetForm(); setStatus("Delivery address saved."); router.refresh(); }
         } catch {

@@ -15,7 +15,7 @@
 
 - Sellers choose delivery only, collection only, or both. Delivery is limited to the United Kingdom, with an optional postcode-area allowlist, fixed GBP postage, service, handling time and descriptive restrictions. Collection uses a public town or general area. Exact arrangements go through the paid order or private messaging after payment. Existing listings retain their existing terms. Drafts need the new terms when they are first published.
 - A completed order freezes the winning price and listing terms. Only the winner can start checkout. Postgres verifies the selected method, saved address ownership and delivery area, and computes the total in pence. Delivery restrictions are displayed as seller instructions. Postcode checks do not establish that a street address is deliverable.
-- New orders release the buyer's address snapshot to the seller after verified payment. The seller can record dispatch and update tracking. The buyer can confirm receipt. Collection runs through preparation, readiness, arrangement, seller handover and buyer confirmation. Both methods support issue reporting. Earlier orders retain their existing address sharing and tracking workflow, with payment marked as unrecorded.
+- Orders eligible for checkout release the buyer's address snapshot to the seller after verified payment. The seller can record dispatch and update tracking. The buyer can confirm receipt. Collection runs through preparation, readiness, arrangement, seller handover and buyer confirmation. Both methods support issue reporting. Historical orders without a verified terms snapshot retain their existing fulfilment workflow, with payment marked as unrecorded.
 - Checkout and fulfilment appear separately in the order. History loads a single bounded status lookup per page. The existing catalogue and auction Realtime payloads continue to carry the `shipping_info` summary. Structured listing terms, orders, addresses and payment data are outside Realtime.
 - Stripe Checkout runs only with an explicit sandbox configuration and an operator-assigned UK test seller. Stripe collects card and onboarding information. Supabase holds private account IDs, payment attempts, provider event IDs and payment adjustments. It does not receive payment card or bank details.
 - One database reservation per order and a stable Stripe idempotency key prevent concurrent creates from producing multiple payable sessions. A declined card can retry the existing session. A verified expiry releases the reservation. A successful order retains its reservation through refunds and disputes.
@@ -33,7 +33,7 @@ Stripe charge type determines where the charge sits and which balance funds refu
 
 ## Local and staging setup
 
-1. Use an isolated Supabase staging project with synthetic users and auctions. Review and apply migrations 016 and 017 after 015 in order. Review existing sold records with missing counterparties or attempts separately. Keep the deployed application and migrations in sync before accepting new seller submissions. Keep the existing participant-scoped messages publication from 015 and keep payment and address tables outside Realtime.
+1. Use an isolated Supabase staging project with synthetic users and auctions. Review and apply migrations 016 through 018 after 015 in order. Review existing sold records with missing counterparties or attempts separately. Keep the deployed application and migrations in sync before accepting new seller submissions. Keep the existing participant-scoped messages publication from 015 and keep payment and address tables outside Realtime.
 2. In a **Stripe sandbox**, complete the platform's Connect setup and branding. Provision a UK test connected account per staging seller using an account configuration that supports direct card charges and Account Links. Request the card payments capability and complete the test payout and verification requirements. Provision the account in the sandbox Dashboard or via an approved operator workflow. Associate its `acct_…` ID with the seller's Supabase profile UUID in `public.seller_stripe_test_accounts` using a trusted staging database operator. Verify the mapping before onboarding. Keep mappings private and avoid changing them during payment testing.
 3. Set the following variables in the staging environment. For local Next.js use an ignored local environment file. For Workers preview use private variables or secrets and the relevant build variables. Use a dedicated test key. Checkout and onboarding start disabled.
 
@@ -62,10 +62,36 @@ The integration uses the official Stripe SDK with fetch and Web Crypto. It restr
 
 ### Recovery
 
-- A checkout session expires two hours after reservation. An unknown create can be retried with the original key during the first hour. A known open session is reused. An unresolved create after that window fails closed. Browser refreshes and success redirects do not release reservations or settle orders.
+- A checkout session expires two hours after reservation. An unknown create can be retried with the original key during the first hour. A known open session is reused after cancellation or a decline. When the buyer resumes an expired session, the server retrieves it in the connected account and releases the reservation only after verifying that Stripe has closed it unpaid. An unresolved create after the retry window needs operator reconciliation. The success return displays processing and briefly refreshes order status while the signed webhook settles the order.
 - If a buyer returns after a payment or expiration and the order still shows pending, check the connected-account event in Stripe Workbench and redeliver it. A webhook 503 requires investigation or retry. Compare the attempt, session and PaymentIntent IDs, account scope and amounts before resolving an error. Never clear a reservation on a timer or because a buyer reports abandonment.
 - If there is no session ID and no webhook, reconcile the attempt with Stripe in the original connected account and creation window using its `nonstop_test_attempt` metadata and Stripe request logs. Only a reviewed operator procedure may release a reservation after proving there is no payable session. A manual release tool is outside this change.
 - Turning off the checkout switch prevents new sessions and onboarding. Keep the signing configuration available until outstanding sandbox attempts have reconciled. It is possible to receive signed Stripe events after the switch is turned off.
+
+### Historical orders, including the reported Lot #1231
+
+The combination of `NOT_RECORDED` and the old “predates online checkout” message identifies an order without a structured terms snapshot. A winning price and an identifiable buyer are only part of checkout eligibility. The address error came from an empty saved-address selection on the separate legacy fulfilment form.
+
+On the isolated test database, inspect the sale by permanent reference before deciding whether to recover it. This query includes the IDs needed for operator review and excludes addresses and Stripe account IDs.
+
+```sql
+select l.lot_reference, o.id as order_id, o.buyer_id, o.seller_id,
+       l.status, l.highest_bidder_id = o.buyer_id as winner_matches,
+       l.seller_id = o.seller_id as seller_matches, a.outcome, a.final_price,
+       a.completed_at = l.sold_at as sale_attempt_matches,
+       o.winning_minor, o.payment_state, o.shipping_state, o.version,
+       o.address_snapshot is not null as has_confirmed_address,
+       o.terms_snapshot, t.details as published_terms, t.summary = l.shipping_info as terms_match_listing,
+       exists (select 1 from public.stripe_checkout_attempts s where s.order_id = o.id) as has_stripe_attempt
+from public.lots l
+left join public.fulfilment_orders o on o.lot_id = l.id
+left join public.auction_attempts a on a.lot_id = o.lot_id and a.preview_started_at = o.preview_started_at
+left join public.listing_fulfilment_terms t on t.lot_id = l.id
+where l.lot_reference = 1231;
+```
+
+Before making the order payable, check the original listing and verify with the seller, buyer and any payment records that the full bid is still owed. `NOT_RECORDED` can include payments made outside the site. If the result, participants and original structured terms agree and the order is untouched, the database owner can call `public.enable_reviewed_legacy_test_checkout(order_id, buyer_id, winning_minor)` for that one reviewed test order. If the £222 result is confirmed, the winning amount argument is `22200`. Record the evidence in the operator review. The function rechecks the frozen sale and terms, records the eligibility change, and leaves payment awaiting checkout.
+
+If the original structured terms are absent, obtain the published listing or another reliable record of the terms accepted by both parties, including the delivery price or free collection option. Without that evidence, keep online checkout unavailable and refer the order to the original arrangements. If evidence exists only outside the database, recovery needs a case-specific, reviewed data correction to preserve those terms. Orders with payment or fulfilment activity require separate reconciliation before any new charge. An already paid order must never be opened for checkout.
 
 ## Before any live activation
 
@@ -75,7 +101,7 @@ Confirm UK consumer-rights and tax treatment for trader and private sellers, use
 
 ## Change inventory
 
-- Database migrations `016_listing_and_order_fulfilment.sql` and `017_stripe_test_checkout.sql`. Previously applied migrations are preserved.
+- Database migrations `016_listing_and_order_fulfilment.sql`, `017_stripe_test_checkout.sql` and `018_won_order_checkout.sql`. Previously applied migrations are preserved.
 - Seller listings `src/app/sell/page.tsx`, `src/components/SellerListingForm.tsx` and `src/components/ListingFulfilmentFields.tsx`.
 - Orders and notices `src/app/orders/[lotId]/page.tsx`, `src/app/account/addresses/page.tsx`, `src/components/OrderManagement.tsx`, `src/components/OrderCheckout.tsx`, `src/components/CompletedAuctions.tsx`, `src/components/AccountNotifications.tsx`, `src/lib/completed-auctions.ts` and `src/lib/transactions.ts`.
 - Stripe and seller account `src/lib/stripe-test.ts`, `src/lib/supabase/types.ts`, `src/app/checkout-actions.ts`, `src/app/api/stripe/webhook/route.ts`, `src/app/account/seller-payments/page.tsx`, `src/components/SellerOnboardingButton.tsx` and `src/app/my-auctions/page.tsx`.
@@ -84,8 +110,6 @@ Confirm UK consumer-rights and tax treatment for trader and private sellers, use
 
 ## Verification scope
 
-- TypeScript, lint, Next.js production build and OpenNext Worker build passed. The automated suite passed all 116 tests, including 19 database and RLS tests.
-- The full browser run passed 55 tests. The enabled checkout fixture passed separately, and all 14 affected seller and image checks passed after the final change to keep structured terms outside the live auction payload.
 - Run `npm run typecheck`, `npm run lint`, `npm test`, `npm run test:database`, `npm run test:browser`, `npm run build` and `npm run build:cloudflare`.
-- The regular Playwright suite keeps payment actions disabled and checks the checkout breakdown at mobile and desktop widths. Set `TEST_STRIPE_CHECKOUT=1` and run `npm run test:browser -- tests/browser/transactions.spec.ts -g "sandbox checkout opens"` for the local enabled checkout test. It uses an intercepted Stripe API, synthetic credentials and a Stripe SDK-signed fixture event.
+- The regular Playwright suite keeps payment actions disabled and checks the checkout breakdown at mobile and desktop widths. Set `TEST_STRIPE_CHECKOUT=1` and run `npm run test:browser -- tests/browser/transactions.spec.ts` for the enabled checkout tests. They use an intercepted Stripe API, synthetic credentials and a Stripe SDK-signed fixture event.
 - PostgreSQL integration tests apply the migration chain locally and exercise permissions, checkout reservations, capture, failure, expiry, refund reordering, disputes and both fulfilment methods. Hosted Supabase with real JWTs, concurrent database connections and Stripe-hosted test payments on the staging Worker remain separate acceptance checks.

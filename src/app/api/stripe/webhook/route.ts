@@ -1,5 +1,6 @@
 import Stripe from "stripe";
-import { isUuid, stripeTestClients, stripeTestConfig } from "@/lib/stripe-test";
+import { isExpiredUnpaidCheckout, stripeTestClients, stripeTestConfig, verifiedTestIntent, verifyTestCheckout } from "@/lib/stripe-test";
+import { isUuid } from "@/lib/transactions";
 
 function providerId(value: string | { id: string } | null | undefined) {
   return typeof value === "string" ? value : value?.id;
@@ -51,21 +52,16 @@ async function recordEvent(event: Stripe.Event, { stripe, admin }: ReturnType<ty
   }
   if (!isUuid(attemptId)) return;
   const { data: attempt, error } = await admin.from("stripe_checkout_attempts")
-    .select("stripe_account,session_id,total_minor").eq("id", attemptId).maybeSingle();
+    .select("id,stripe_account,session_id,total_minor").eq("id", attemptId).maybeSingle();
   if (error) throw error;
   if (!attempt || attempt.stripe_account !== stripeAccount) return;
   sessionId ??= attempt.session_id ?? undefined;
   if (!sessionId) throw new Error("Checkout session not bound yet");
 
   const session = await stripe.checkout.sessions.retrieve(sessionId, { expand: ["payment_intent"] }, scope);
-  if (session.livemode || session.mode !== "payment" || session.currency !== "gbp" ||
-    session.payment_method_types.length !== 1 || session.payment_method_types[0] !== "card" ||
-    session.amount_total !== attempt.total_minor || session.metadata?.nonstop_test_attempt !== attemptId ||
-    (attempt.session_id && attempt.session_id !== session.id)) throw new Error("Checkout details do not match");
-  const intent = typeof session.payment_intent === "object" ? session.payment_intent : null;
+  verifyTestCheckout(session, attempt);
+  const intent = verifiedTestIntent(session, attempt);
   if (intentId && intent?.id !== intentId) throw new Error("Payment intent does not match checkout");
-  if (intent && (intent.livemode || intent.currency !== "gbp" || intent.amount !== attempt.total_minor ||
-    intent.metadata.nonstop_test_attempt !== attemptId)) throw new Error("Payment intent details do not match");
 
   let kind: string;
   let refunded: number | undefined;
@@ -88,8 +84,7 @@ async function recordEvent(event: Stripe.Event, { stripe, admin }: ReturnType<ty
       adjustmentStatus = dispute.status === "lost" ? "LOST" :
         ["won", "warning_closed", "prevented"].includes(dispute.status) ? "RESOLVED" : "OPEN";
     }
-  } else if (session.status === "expired" && session.payment_status === "unpaid" &&
-    (!intent || ["canceled", "requires_payment_method"].includes(intent.status))) {
+  } else if (isExpiredUnpaidCheckout(session, intent)) {
     kind = "expired";
   } else if (event.type === "payment_intent.payment_failed" && session.status === "open" && session.payment_status === "unpaid" &&
     intent?.status === "requires_payment_method") {

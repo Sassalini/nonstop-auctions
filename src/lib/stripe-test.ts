@@ -2,6 +2,7 @@ import "server-only";
 import Stripe from "stripe";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "./supabase/types";
+import type { StripeCheckoutAttempt } from "./transactions";
 
 export function stripeTestConfig() {
   const secret = process.env.STRIPE_TEST_SECRET_KEY;
@@ -41,6 +42,23 @@ export function sellerCanAcceptTestPayments(account: Stripe.Account) {
     account.capabilities?.card_payments === "active" && !account.requirements?.disabled_reason;
 }
 
-export function isUuid(value: unknown): value is string {
-  return typeof value === "string" && /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(value);
+export function verifyTestCheckout(session: Stripe.Checkout.Session, attempt: Pick<StripeCheckoutAttempt, "id" | "session_id" | "total_minor">) {
+  if (session.livemode || session.mode !== "payment" || session.currency !== "gbp" ||
+    session.payment_method_types.length !== 1 || session.payment_method_types[0] !== "card" ||
+    session.amount_total !== attempt.total_minor || session.metadata?.nonstop_test_attempt !== attempt.id ||
+    (attempt.session_id && attempt.session_id !== session.id)) throw new Error("Checkout details do not match");
+}
+
+export function verifiedTestIntent(session: Stripe.Checkout.Session, attempt: Pick<StripeCheckoutAttempt, "id" | "total_minor">) {
+  const intent = session.payment_intent;
+  if (typeof intent === "string" || (intent && (intent.livemode || intent.currency !== "gbp" ||
+    intent.amount !== attempt.total_minor || intent.metadata.nonstop_test_attempt !== attempt.id))) {
+    throw new Error("Payment intent details do not match");
+  }
+  return intent;
+}
+
+export function isExpiredUnpaidCheckout(session: Stripe.Checkout.Session, intent: Stripe.PaymentIntent | null) {
+  return session.status === "expired" && session.payment_status === "unpaid" &&
+    (!intent || ["canceled", "requires_payment_method"].includes(intent.status));
 }

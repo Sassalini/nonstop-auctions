@@ -47,6 +47,15 @@ export function fulfilmentLabel(order: Pick<FulfilmentOrder, "shipping_state" | 
   return fulfilmentLabels[order.shipping_state] ?? order.shipping_state;
 }
 
+export function isUuid(value: unknown): value is string {
+  return typeof value === "string" && /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(value);
+}
+
+export function isCheckoutOrder(order: Pick<FulfilmentOrder, "terms_snapshot" | "winning_minor" | "shipping_state" | "payment_state">) {
+  return Boolean(order.terms_snapshot && order.winning_minor != null && order.shipping_state === "AWAITING_PAYMENT" &&
+    ["UNPAID", "PENDING", "FAILED"].includes(order.payment_state));
+}
+
 // Presentation check only. Checkout revalidates the address and price in Postgres.
 export function eligibleDeliveryAddress(address: AddressDetails, terms: FulfilmentTerms) {
   const country = address.country.trim().toLowerCase();

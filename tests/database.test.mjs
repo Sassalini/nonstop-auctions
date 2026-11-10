@@ -241,6 +241,9 @@ test('sold results create one private order; address snapshots and state transit
  const aid=await transaction(bidder,'save_address',{details:delivery,default:true});
  assert.equal((await asUser(seller,()=>db.query('select * from public.delivery_addresses'))).rows.length,0);
  assert.equal((await asUser(other,()=>db.query('select * from public.fulfilment_orders'))).rows.length,0);
+ for (const address of ['', null, 'invalid-id']) {
+  await assert.rejects(transaction(bidder,'select_address',{order:o.id,version:0,address}),/Please select a delivery address/);
+ }
  await assert.rejects(transaction(other,'select_address',{order:o.id,version:0,address:aid}),/unavailable/);
  await transaction(bidder,'select_address',{order:o.id,version:0,address:aid});
  await transaction(bidder,'save_address',{id:aid,details:{...delivery,line1:'New address'},default:true});
@@ -319,6 +322,36 @@ const record = (attempt, kind, { event = randomUUID(), refund = null, adjustment
 
 const currentOrder = order => db.query('select * from public.fulfilment_orders where id=$1', [order.id]).then(result => result.rows[0]);
 
+test('only an operator can enable an untouched historical order with a verified sold result and original structured terms', () => fixture(async () => {
+  const enable = (order, buyer = bidder, price = 12510) =>
+    db.query('select public.enable_reviewed_legacy_test_checkout($1,$2,$3)', [order.id, buyer, price]);
+  const withoutTerms = await soldOrder();
+  await denied(() => enable(withoutTerms, bidder, 27500), /Original structured delivery or collection terms are missing/);
+  assert.equal((await currentOrder(withoutTerms)).payment_state, 'NOT_RECORDED');
+
+  const order = await structuredSale(collectionTerms);
+  // Model a pre-snapshot order whose original listing terms were preserved.
+  await db.query("update public.fulfilment_orders set terms_snapshot=null,payment_state='NOT_RECORDED',shipping_state='AWAITING_ADDRESS' where id=$1", [order.id]);
+  await assert.rejects(asUser(bidder, () => enable(order)), /permission denied/);
+  await assert.rejects(asUser(seller, () => enable(order)), /permission denied/);
+  await denied(() => enable(order, other), /Reviewed buyer does not match/);
+  await denied(() => enable(order, bidder, 12511), /Reviewed amount or participants do not match/);
+  await db.exec('savepoint fulfilment_progress');
+  const address = await transaction(bidder, 'save_address', { details: delivery });
+  await transaction(bidder, 'select_address', { order: order.id, version: 0, address });
+  await denied(() => enable(order), /existing payment or fulfilment activity/);
+  await db.exec('rollback to savepoint fulfilment_progress; release savepoint fulfilment_progress');
+
+  await enable(order);
+  const restored = await currentOrder(order);
+  assert.equal(restored.payment_state, 'UNPAID');
+  assert.equal(restored.shipping_state, 'AWAITING_PAYMENT');
+  assert.deepEqual(restored.terms_snapshot, collectionTerms);
+  assert.equal((await reserve(restored, 'collection')).total_minor, 12510);
+  assert.equal(Number((await row(order.lot_id)).winning_bid), 125.10);
+  assert.equal((await db.query("select count(*)::int n from public.fulfilment_events where order_id=$1 and kind='legacy_checkout_enabled'", [order.id])).rows[0].n, 1);
+}));
+
 test('all listing fulfilment modes are validated, published with public terms and locked before bids', () => fixture(async () => {
   for (const terms of [deliveryTerms, collectionTerms, bothTerms]) {
     const { id } = await createStructuredDraft();
@@ -357,6 +390,7 @@ test('winner-only checkout uses the frozen price and postcode, holds a private a
   const stranger = await transaction(other, 'save_address', { details: delivery });
   await denied(() => reserve(order, 'delivery', address, other), /Order unavailable/);
   await denied(() => reserve(order, 'collection'), /method is not offered/);
+  await denied(() => reserve(order, 'delivery', null), /own saved address/);
   await denied(() => reserve(order, 'delivery', outside), /does not deliver/);
   await denied(() => reserve(order, 'delivery', stranger), /own saved address/);
 
