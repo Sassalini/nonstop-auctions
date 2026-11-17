@@ -38,7 +38,7 @@ let stripeReady = true;
 let stripeSession = null;
 let stripeSessionCount = 0;
 let stripeEvents = new Set();
-const newOnboardingState = (active = false) => ({ active, accounts: new Map(), mappings: new Map(), reservations: new Map(), keys: new Map(), createCount: 0, linkCount: 0, verification: 'incomplete', createError: false, linkError: false, bindError: false });
+const newOnboardingState = (active = false) => ({ active, accounts: new Map(), mappings: new Map(), reservations: new Map(), keys: new Map(), createCount: 0, linkCount: 0, verification: 'incomplete', createError: false, linkError: false, bindError: false, statusError: false });
 let onboarding = newOnboardingState();
 function onboardingAccount(account) {
   const ready = onboarding.verification === 'ready';
@@ -108,6 +108,7 @@ const server = createServer(async (req, res) => {
       }
       if (url.pathname.endsWith('/accounts')) return reply({ object: 'list', data: [...onboarding.accounts.values()], has_more: false });
       if (url.pathname.includes('/accounts/')) {
+        if (onboarding.statusError) return reply({ error: { message: 'Synthetic status lookup failure' } }, 400);
         const account = onboarding.accounts.get(url.pathname.split('/').at(-1));
         return account ? reply(onboardingAccount(account)) : reply({ error: { message: 'No such fixture account' } }, 404);
       }
@@ -176,7 +177,13 @@ const server = createServer(async (req, res) => {
     if (state.expireStripe) stripeExpired = true;
     if (state.stripeMapped !== undefined) stripeMapped = state.stripeMapped;
     if (state.stripeReady !== undefined) stripeReady = state.stripeReady;
-    for (const key of ['verification', 'createError', 'linkError', 'bindError']) {
+    if (state.existingOnboarding) {
+      const account = { id: 'acct_existingOnboarding', country: 'GB', object: 'account', metadata: {} };
+      onboarding.accounts.set(account.id, account);
+      onboarding.mappings.set(accountB, account.id);
+      onboarding.verification = state.existingOnboarding;
+    }
+    for (const key of ['verification', 'createError', 'linkError', 'bindError', 'statusError']) {
       if (state[key] !== undefined) onboarding[key] = state[key];
     }
     if (state.mode === 'seller') {

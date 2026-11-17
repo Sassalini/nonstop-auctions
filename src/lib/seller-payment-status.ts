@@ -1,6 +1,9 @@
 import type Stripe from "stripe";
 
 export function sellerCanAcceptTestPayments(account: Stripe.Account) {
+  // Checkout uses direct card charges in this connected account's scope.
+  // Preserve the existing requirement that sellers can both charge and pay out;
+  // platform transfers are not part of this checkout model.
   return account.country === "GB" && account.details_submitted && account.charges_enabled && account.payouts_enabled &&
     account.capabilities?.card_payments === "active" && !account.requirements?.disabled_reason;
 }
@@ -12,13 +15,13 @@ export function sellerPaymentStatus(account: Stripe.Account | null, provisioning
   const requirements = account.requirements;
   const reason = requirements?.disabled_reason;
   if (account.country !== "GB" || (reason && !reason.startsWith("requirements."))) {
-    return { title: "Restricted or unavailable", description: "Your sandbox account has a restriction. Contact support or review your Stripe Dashboard.", canOnboard: false };
+    return { title: "Restricted", description: "Your sandbox account has a restriction. Contact support or review your Stripe Dashboard.", canOnboard: false };
   }
   if (account.details_submitted && (requirements?.currently_due?.length || requirements?.past_due?.length || requirements?.errors?.length)) {
-    return { title: "Additional verification required", description: "Stripe needs more information. Continue onboarding to review the outstanding requirements.", canOnboard: true };
+    return { title: "Verification required", description: "Stripe needs more information. Continue onboarding to review the outstanding requirements.", canOnboard: true };
   }
   if (sellerCanAcceptTestPayments(account)) {
-    return { title: "Ready to receive payments", description: "Your sandbox account can receive test payments. No live payments or payouts are enabled by this site.", canOnboard: false };
+    return { title: "Ready to accept payments", description: "Your sandbox account can accept test payments. No live payments or payouts are enabled by this site.", canOnboard: false };
   }
   return { title: "Setup in progress", description: requirements?.pending_verification?.length
     ? "Stripe is reviewing your verification information. Check back for an updated status."

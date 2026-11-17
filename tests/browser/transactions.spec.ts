@@ -194,6 +194,9 @@ test('delivery uses the saved address and postage, and only a verified expiry un
     contentType: 'text/html', body: '<h1>Hosted Checkout fixture</h1>',
   }));
   await signIn(page);
+  await page.goto('/won-auctions');
+  await expect(page.getByText('Payment availability is checked on your order.', { exact: false })).toBeVisible();
+  await page.getByRole('link', { name: 'View payment options', exact: true }).click();
   await expect(page.locator('#checkout').getByText(/until the seller sets up Stripe/)).toBeVisible();
   await expect(page.getByRole('button', { name: checkoutButton })).toHaveCount(0);
   await request.post(`${fixture}/state`, { data: { stripeMapped: true, stripeReady: false } });

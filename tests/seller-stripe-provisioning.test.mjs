@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { after, before, test } from 'node:test';
 import { releaseDatabase } from './helpers/release-database.mjs';
 import { loadServerModule } from './helpers/load-server-module.mjs';
-import { sellerPaymentStatus } from '../src/lib/seller-payment-status.ts';
+import { sellerPaymentStatus, sellerCanAcceptTestPayments } from '../src/lib/seller-payment-status.ts';
 
 let db;
 const platform = 'acct_platformFixture';
@@ -203,13 +203,26 @@ test('seller payment status reflects actual capabilities and requirements', () =
   assert.equal(sellerPaymentStatus(null, true).title, 'Setup in progress');
   assert.equal(sellerPaymentStatus(account).title, 'Setup in progress');
   account.details_submitted = true; account.requirements.currently_due = ['representative.verification.document'];
-  assert.equal(sellerPaymentStatus(account).title, 'Additional verification required');
+  assert.equal(sellerPaymentStatus(account).title, 'Verification required');
   account.requirements = { pending_verification: ['representative.verification.document'] };
   assert.equal(sellerPaymentStatus(account).title, 'Setup in progress');
   account.requirements = {}; account.charges_enabled = true; account.payouts_enabled = true; account.capabilities.card_payments = 'active';
-  assert.equal(sellerPaymentStatus(account).title, 'Ready to receive payments');
+  assert.equal(sellerPaymentStatus(account).title, 'Ready to accept payments');
   account.requirements = { disabled_reason: 'rejected.fraud' };
-  assert.equal(sellerPaymentStatus(account).title, 'Restricted or unavailable');
+  assert.equal(sellerPaymentStatus(account).title, 'Restricted');
+});
+
+test('direct card checkout requires charge and payout eligibility and active cards, without platform transfers', () => {
+  const ready = { country: 'GB', details_submitted: true, charges_enabled: true, payouts_enabled: true,
+    capabilities: { card_payments: 'active' }, requirements: {} };
+  assert.equal(sellerCanAcceptTestPayments(ready), true);
+  for (const overrides of [{ charges_enabled: false }, { payouts_enabled: false }, { details_submitted: false },
+    { capabilities: { card_payments: 'pending' } }, { capabilities: {} }, { country: 'US' },
+    { requirements: { disabled_reason: 'requirements.past_due' } }]) {
+    const account = { ...ready, ...overrides };
+    assert.equal(sellerCanAcceptTestPayments(account), false);
+    assert.notEqual(sellerPaymentStatus(account).title, 'Ready to accept payments');
+  }
 });
 
 test('RLS and grants deny browser roles all mapping/intent access and provisioning RPCs', async () => {

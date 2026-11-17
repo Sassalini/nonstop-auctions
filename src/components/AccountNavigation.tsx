@@ -1,16 +1,17 @@
 import Link from "next/link";
 
-const tabs = [
+export const accountTabs = [
   { id: "won", label: "Won Auctions", href: "/won-auctions" },
   { id: "sold", label: "Sold Auctions", href: "/my-auctions#sold-auctions" },
   { id: "messages", label: "Messages", href: "/messages" },
+  { id: "payments", label: "Seller Payments", href: "/account/seller-payments" },
   { id: "addresses", label: "Delivery Addresses", href: "/account/addresses" },
 ] as const;
 
-export function AccountNavigation({ current }: { current: typeof tabs[number]["id"] }) {
+export function AccountNavigation({ current }: { current: typeof accountTabs[number]["id"] }) {
   return (
     <nav aria-label="My Account" className="mb-6 grid grid-cols-2 gap-2 border-b border-auction-gold/20 pb-3 sm:flex sm:flex-wrap">
-      {tabs.map(tab => (
+      {accountTabs.map(tab => (
         <Link
           key={tab.id}
           href={tab.href}

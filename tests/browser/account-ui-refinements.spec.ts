@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 const state = "http://127.0.0.1:54399/_test/state";
-const labels = ["Won Auctions", "Sold Auctions", "Messages", "Delivery Addresses"];
+const labels = ["Won Auctions", "Sold Auctions", "Messages", "Seller Payments", "Delivery Addresses"];
 
 async function signIn(page: Page, email = "one@example.test") {
   await page.goto("/login?next=/account/addresses");
@@ -116,6 +116,10 @@ for (const width of [320, 1280]) {
     await expect(page.getByRole("navigation", { name: "Conversations", exact: true }).getByRole("link").first()).toBeVisible();
     await page.getByRole("navigation", { name: "Conversations", exact: true }).getByRole("link").first().click();
     await expect(page.getByLabel("Message", { exact: true })).toBeVisible();
+    await nav.getByRole("link", { name: "Seller Payments", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Seller Payments", exact: true })).toBeVisible();
+    await expect(nav.getByRole("link", { name: "Seller Payments" })).toHaveAttribute("aria-current", "page");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await nav.getByRole("link", { name: "Delivery Addresses", exact: true }).click();
     await expect(work).toContainText("20 Updated Road");
     await page.screenshot({ path: `test-results/account-${width}.png`, fullPage: true });

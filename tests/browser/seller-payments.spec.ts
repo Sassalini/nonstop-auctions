@@ -27,12 +27,12 @@ test('new seller starts setup and return checks incomplete verification before r
   await expect(page.getByRole('heading', { name: 'Setup in progress', exact: true })).toBeVisible();
   await request.post(`${fixture}/state`, { data: { verification: 'additional' } });
   await page.reload();
-  await expect(page.getByRole('heading', { name: 'Additional verification required', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Verification required', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Continue Stripe onboarding' }).click();
   await expect(page.getByRole('heading', { name: 'Stripe onboarding fixture' })).toBeVisible();
   await request.post(`${fixture}/state`, { data: { verification: 'ready' } });
   await page.goto(payments);
-  await expect(page.getByRole('heading', { name: 'Ready to receive payments', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Ready to accept payments', exact: true })).toBeVisible();
   expect((await (await request.get(`${fixture}/onboarding`)).json()).creations).toBe(1);
   await expect(page.getByRole('button', { name: 'Continue Stripe onboarding' })).toHaveCount(0);
 });
@@ -90,5 +90,51 @@ test('restricted accounts display a clear status and unauthenticated refresh can
   await expect(page.getByRole('heading', { name: 'Stripe onboarding fixture' })).toBeVisible();
   await request.post(`${fixture}/state`, { data: { verification: 'restricted' } });
   await page.goto(payments);
-  await expect(page.getByRole('heading', { name: 'Restricted or unavailable', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Restricted', exact: true })).toBeVisible();
+});
+
+for (const [verification, title] of [['incomplete', 'Setup in progress'], ['additional', 'Verification required'], ['ready', 'Ready to accept payments']]) {
+  test(`existing ${verification} seller uses their mapping without provisioning`, async ({ page, request }) => {
+    await request.post(`${fixture}/state`, { data: { existingOnboarding: verification } });
+    await signIn(page);
+    await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible();
+    const nav = page.getByRole('navigation', { name: 'My Account', exact: true });
+    await expect(nav.getByRole('link', { name: 'Seller Payments', exact: true })).toHaveAttribute('aria-current', 'page');
+    await page.locator('header summary').click();
+    await page.getByRole('navigation', { name: 'Account settings' }).getByRole('link', { name: 'Seller Payments', exact: true }).click();
+    await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible();
+    if (verification === 'ready') {
+      await expect(page.getByRole('button', { name: 'Continue Stripe onboarding' })).toHaveCount(0);
+    } else {
+      await page.getByRole('button', { name: 'Continue Stripe onboarding' }).click();
+      await expect(page.getByRole('heading', { name: 'Stripe onboarding fixture' })).toBeVisible();
+    }
+    const state = await (await request.get(`${fixture}/onboarding`)).json();
+    expect(state.creations).toBe(0);
+    expect(state.mappings).toEqual([['00000000-0000-0000-0000-000000000103', 'acct_existingOnboarding']]);
+    if (verification !== 'ready') expect(state.lastLink.account).toBe('acct_existingOnboarding');
+  });
+}
+
+test('status lookup failures do not report a Stripe restriction or allow replacement', async ({ page, request }) => {
+  await request.post(`${fixture}/state`, { data: { existingOnboarding: 'ready', statusError: true } });
+  await signIn(page);
+  await expect(page.getByRole('heading', { name: 'Status unavailable', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: /onboarding|Set Up Seller Payments/ })).toHaveCount(0);
+  await request.post(`${fixture}/state`, { data: { statusError: false } });
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Ready to accept payments', exact: true })).toBeVisible();
+  expect((await (await request.get(`${fixture}/onboarding`)).json()).creations).toBe(0);
+});
+
+test('another signed-in account cannot view or resume an existing seller mapping', async ({ page, request }) => {
+  await request.post(`${fixture}/state`, { data: { existingOnboarding: 'ready' } });
+  await signIn(page, 'one@example.test');
+  await expect(page.getByRole('heading', { name: 'Not set up', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Set Up Seller Payments', exact: true })).toBeVisible();
+  const refresh = await page.request.get(`${payments}/refresh`, { maxRedirects: 0 });
+  expect(refresh.headers().location).toContain('onboarding=retry');
+  const state = await (await request.get(`${fixture}/onboarding`)).json();
+  expect(state.links).toBe(0);
+  expect(state.creations).toBe(0);
 });

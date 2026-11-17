@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ChevronDown, UserCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { accountTabs } from "./AccountNavigation";
 
 export function AccountMenu() {
   const [name, setName] = useState<string | null>(null);
@@ -21,7 +22,12 @@ export function AccountMenu() {
     <Link prefetch={false} href={name ? "/my-auctions" : "/login"} aria-label={name ?? "Sign in"} className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.045] px-2.5 py-2 text-sm text-auction-ivory transition hover:border-auction-gold/40">
       <UserCircle size={22} strokeWidth={1.8} /><span className="hidden sm:inline">{name ?? "Sign in"}</span>
     </Link>
-    {name ? <details className="relative"><summary aria-label="Account options" className="flex min-h-11 min-w-8 cursor-pointer list-none items-center justify-center text-auction-gold [&::-webkit-details-marker]:hidden"><ChevronDown size={16} aria-hidden="true" /></summary><nav aria-label="Account settings" className="absolute right-0 z-50 w-48 rounded-lg border border-auction-gold/30 bg-auction-black p-3"><Link className="block py-3 text-sm text-auction-gold" href="/won-auctions" prefetch={false}>Won Auctions</Link><Link className="block py-3 text-sm text-auction-gold" href="/my-auctions#sold-auctions" prefetch={false}>Sold Auctions</Link><Link className="block py-3 text-sm text-auction-gold" href="/messages" prefetch={false}>Messages</Link><Link className="block py-3 text-sm text-auction-gold" href="/account/addresses" prefetch={false}>Delivery Addresses</Link></nav></details> : null}
+    {name ? <details className="relative">
+      <summary aria-label="Account options" className="flex min-h-11 min-w-8 cursor-pointer list-none items-center justify-center text-auction-gold [&::-webkit-details-marker]:hidden"><ChevronDown size={16} aria-hidden="true" /></summary>
+      <nav aria-label="Account settings" className="absolute right-0 z-50 w-48 rounded-lg border border-auction-gold/30 bg-auction-black p-3">
+        {accountTabs.map(tab => <Link key={tab.id} className="block py-3 text-sm text-auction-gold" href={tab.href} prefetch={false}>{tab.label}</Link>)}
+      </nav>
+    </details> : null}
     {name ? <button type="button" onClick={async () => {
       const { error } = await createSupabaseBrowserClient().auth.signOut();
       if (!error) { setName(null); router.replace("/login"); router.refresh(); }

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { InteriorShell } from "@/components/InteriorShell";
+import { AccountNavigation } from "@/components/AccountNavigation";
 import { SellerOnboardingButton } from "@/components/SellerOnboardingButton";
 import { transactionAccount } from "@/lib/transaction-account";
 import { stripeTestClients, stripeTestConfig, stripeTestOrigin, testSellerAccount } from "@/lib/stripe-test";
@@ -12,7 +13,7 @@ export default async function SellerPaymentsPage({ searchParams }: { searchParam
   const { user } = await transactionAccount("/account/seller-payments");
   const query = await searchParams;
   const config = stripeTestConfig();
-  let status = { title: "Restricted or unavailable", description: "Stripe test onboarding is unavailable.", canOnboard: false };
+  let status = { title: "Status unavailable", description: "Stripe test onboarding is unavailable. Please try again later or contact support.", canOnboard: false };
   let initial = false;
   if (config && stripeTestOrigin()) {
     try {
@@ -29,13 +30,15 @@ export default async function SellerPaymentsPage({ searchParams }: { searchParam
         initial = !data;
       }
     } catch {
-      status = { title: "Restricted or unavailable", description: "Stripe account status is temporarily unavailable. Refresh this page to try again.", canOnboard: false };
+      status = { title: "Status unavailable", description: "Stripe account status is temporarily unavailable. Refresh this page to try again. Your existing setup will be reused.", canOnboard: false };
     }
   }
-  return <InteriorShell eyebrow="Private Desk" title="Seller payments" description="Manage your Stripe Connect setup in the sandbox.">
+  return <InteriorShell eyebrow="My Account" title="Seller Payments" description="Set up and manage payments for the items you sell.">
+    <AccountNavigation current="payments" />
     <section className="premium-card max-w-2xl space-y-4 rounded-lg p-5">
       <h2 className="font-display text-xl text-auction-gold">{status.title}</h2>
       <p>{status.description}</p>
+      <p className="text-sm text-auction-muted">Stripe securely collects your business and verification information. You can return here to check your status or continue an unfinished setup.</p>
       <p className="text-sm text-auction-muted">Test mode only. Use Stripe test information; no real money is moved.</p>
       {query.onboarding === "retry" && <p role="alert" className="text-sm text-auction-ember">The Stripe link could not be refreshed. Continue onboarding to request a new link, or try again later.</p>}
       {status.canOnboard && <SellerOnboardingButton initial={initial} />}
