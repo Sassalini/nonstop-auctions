@@ -8,6 +8,7 @@ import {
   testSellerAccount, verifiedTestIntent, verifyTestCheckout,
 } from "@/lib/stripe-test";
 import { isCheckoutOrder, isUuid } from "@/lib/transactions";
+import { getOrCreateSellerTestAccount, sellerTestAccountLink, SellerSetupRecoveryRequired } from "@/lib/seller-stripe-onboarding";
 
 const checkoutWindowSeconds = 2 * 60 * 60;
 
@@ -118,19 +119,14 @@ export async function openSellerTestOnboarding() {
   const client = await createSupabaseServerClient();
   const { data: { user } } = await client.auth.getUser();
   if (!user) return { error: "Sign in to manage your seller account." };
-  const { stripe, admin } = stripeTestClients(config);
-  const { data: mapping } = await admin.from("seller_stripe_test_accounts").select("stripe_account").eq("seller_id", user.id).maybeSingle();
-  if (!mapping) return { error: "An operator must assign a Stripe sandbox account before onboarding." };
   let url: string;
   try {
-    const returnUrl = `${origin}/account/seller-payments`;
-    const link = await stripe.accountLinks.create({
-      account: mapping.stripe_account, type: "account_onboarding",
-      refresh_url: returnUrl, return_url: returnUrl,
-    });
-    url = link.url;
-  } catch {
-    return { error: "Could not open Stripe onboarding. Please try again." };
+    const clients = stripeTestClients(config);
+    const accountId = await getOrCreateSellerTestAccount(clients, user.id);
+    url = await sellerTestAccountLink(clients.stripe, origin, accountId);
+  } catch (error) {
+    return { error: error instanceof SellerSetupRecoveryRequired ? error.message :
+      "Could not open Stripe onboarding. Please try again; your existing setup will be reused." };
   }
   redirect(url);
 }

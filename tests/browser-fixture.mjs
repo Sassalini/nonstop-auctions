@@ -38,6 +38,16 @@ let stripeReady = true;
 let stripeSession = null;
 let stripeSessionCount = 0;
 let stripeEvents = new Set();
+const newOnboardingState = (active = false) => ({ active, accounts: new Map(), mappings: new Map(), reservations: new Map(), keys: new Map(), createCount: 0, linkCount: 0, verification: 'incomplete', createError: false, linkError: false, bindError: false });
+let onboarding = newOnboardingState();
+function onboardingAccount(account) {
+  const ready = onboarding.verification === 'ready';
+  return { ...account, details_submitted: onboarding.verification !== 'incomplete', charges_enabled: ready, payouts_enabled: ready,
+    capabilities: { card_payments: ready ? 'active' : 'inactive' },
+    requirements: { currently_due: onboarding.verification === 'additional' ? ['representative.verification.document'] : [],
+      pending_verification: onboarding.verification === 'pending' ? ['representative.verification.document'] : [],
+      disabled_reason: onboarding.verification === 'restricted' ? 'rejected.fraud' : null } };
+}
 const createLot = (status = 'PREVIEW') => ({
   relist_unlimited:false,max_auto_relistings:5,auto_relistings_used:0,completed_attempts:0,
   final_unsold_at:null,removal_requested_at:null,removed_at:null,pending_relist_unlimited:null,pending_max_auto_relistings:null,
@@ -75,6 +85,41 @@ const server = createServer(async (req, res) => {
   const body = async () => JSON.parse(await readBody() || '{}');
   if (url.pathname.startsWith('/_test/stripe/v1/')) {
     if (req.headers.authorization !== 'Bearer sk_test_browser_fixture') return reply({ error: { message: 'Invalid fixture key' } }, 403);
+    if (url.pathname.endsWith('/balance')) return reply({ object: 'balance', livemode: false });
+    if (url.pathname.endsWith('/account')) return reply({ id: 'acct_onboardingPlatform', object: 'account' });
+    if (onboarding.active) {
+      if (url.pathname.endsWith('/accounts') && req.method === 'POST') {
+        if (onboarding.createError) return reply({ error: { type: 'invalid_request_error', message: 'Synthetic account creation error' } }, 400);
+        const form = new URLSearchParams(await readBody());
+        const key = req.headers['idempotency-key'];
+        const reservation = form.get('metadata[nonstop_test_provisioning]');
+        if (!key || key !== `nonstop-test-seller-v1-${reservation}` || form.get('country') !== 'GB' ||
+          form.get('controller[fees][payer]') !== 'account' || form.get('controller[losses][payments]') !== 'stripe' ||
+          form.get('controller[stripe_dashboard][type]') !== 'full' || form.get('capabilities[card_payments][requested]') !== 'true') {
+          return reply({ error: { message: 'Invalid onboarding fixture parameters' } }, 400);
+        }
+        if (!onboarding.keys.has(key)) {
+          const account = { id: `acct_onboarding${++onboarding.createCount}`, country: 'GB', object: 'account',
+            controller: { fees: { payer: 'account' }, losses: { payments: 'stripe' }, stripe_dashboard: { type: 'full' } },
+            metadata: { nonstop_test_provisioning: reservation } };
+          onboarding.accounts.set(account.id, account); onboarding.keys.set(key, account.id);
+        }
+        return reply(onboardingAccount(onboarding.accounts.get(onboarding.keys.get(key))));
+      }
+      if (url.pathname.endsWith('/accounts')) return reply({ object: 'list', data: [...onboarding.accounts.values()], has_more: false });
+      if (url.pathname.includes('/accounts/')) {
+        const account = onboarding.accounts.get(url.pathname.split('/').at(-1));
+        return account ? reply(onboardingAccount(account)) : reply({ error: { message: 'No such fixture account' } }, 404);
+      }
+      if (url.pathname.endsWith('/account_links')) {
+        if (onboarding.linkError) return reply({ error: { type: 'invalid_request_error', message: 'Synthetic link creation error' } }, 400);
+        const form = new URLSearchParams(await readBody());
+        if (!onboarding.accounts.has(form.get('account'))) return reply({ error: { message: 'Unmapped fixture account' } }, 400);
+        onboarding.linkCount++;
+        onboarding.lastLink = { account: form.get('account'), refresh: form.get('refresh_url'), return: form.get('return_url') };
+        return reply({ object: 'account_link', url: `https://connect.stripe.com/setup/fixture-${onboarding.linkCount}` });
+      }
+    }
     if (url.pathname.endsWith(`/accounts/${stripeAccount}`)) return reply({
       id: stripeAccount, country: 'GB', details_submitted: stripeReady, charges_enabled: stripeReady,
       payouts_enabled: true, capabilities: { card_payments: 'active' },
@@ -106,12 +151,15 @@ const server = createServer(async (req, res) => {
   }
   if (url.pathname === '/_test/checkout') return reply({ session: stripeSession, attempt: stripeAttempt, sessions: stripeSessionCount,
     orderPaidNotifications: notifications.filter(item => item.user_id === accountB && item.lot_id === id && item.kind === 'ORDER_PAID').length });
+  if (url.pathname === '/_test/onboarding') return reply({ creations: onboarding.createCount, links: onboarding.linkCount,
+    mappings: [...onboarding.mappings.entries()], lastLink: onboarding.lastLink });
   if (url.pathname === '/_test/listing-terms') return reply(listingTerms.get(url.searchParams.get('lot')) ?? null);
   if (url.pathname === '/_test/state') {
     const chunks = []; for await (const chunk of req) chunks.push(chunk);
     const state = JSON.parse(Buffer.concat(chunks).toString() || '{}');
     if (state.mode === 'empty') { lots = []; images = []; rooms = [room]; accountsEnabled = false; notifications = []; watchlist = []; photoObjects = new Map(); listingTerms.clear(); failUpload = false; uploadsBeforeFailure = null; loseSubmitResponse = false; }
-    if (state.mode === 'transactions' || state.mode === 'checkout') {
+    if (state.mode === 'transactions' || state.mode === 'checkout' || state.mode === 'onboarding') {
+      onboarding = newOnboardingState(state.mode === 'onboarding');
       stripeAttempt=null;stripeEvents=new Set();stripeCaptured=false;stripeExpired=false;stripeMapped=true;stripeReady=true;stripeSession=null;stripeSessionCount=0;notifications=[];
       accountsEnabled=true;rooms=[room];lots=[{...createLot('SOLD'),seller_id:accountB,highest_bidder_id:accountA,winning_bid:275,sold_at:new Date().toISOString()}];
       addressRows=[];messageRows=[];eventRows=[];
@@ -128,6 +176,9 @@ const server = createServer(async (req, res) => {
     if (state.expireStripe) stripeExpired = true;
     if (state.stripeMapped !== undefined) stripeMapped = state.stripeMapped;
     if (state.stripeReady !== undefined) stripeReady = state.stripeReady;
+    for (const key of ['verification', 'createError', 'linkError', 'bindError']) {
+      if (state[key] !== undefined) onboarding[key] = state[key];
+    }
     if (state.mode === 'seller') {
       accountsEnabled = true;
       rooms = [room, jewellery, ...['Watch','Art','Design','Dining','Music','Technology','Collectables','Fashion','Motoring','Sport'].map((name,index) => ({ ...room, id: `10000000-0000-0000-0000-0000000000${String(index+20).padStart(2,'0')}`, slug: `${name.toLowerCase()}-room`, name: `The ${name} Room`, display_order: index+20 }))];
@@ -294,6 +345,31 @@ const server = createServer(async (req, res) => {
   if (url.pathname.startsWith('/auth/v1/')) return reply({ code: 'invalid_credentials', msg: 'Invalid login credentials' }, 400);
   const account = requestAccount(req);
   if (req.headers.authorization === 'Bearer service_role_browser_fixture') {
+    if (onboarding.active) {
+      if (url.pathname.endsWith('/seller_stripe_test_accounts')) {
+        const seller = url.searchParams.get('seller_id')?.slice(3);
+        const account = onboarding.mappings.get(seller);
+        return reply(account ? [{ seller_id: seller, stripe_account: account }] : []);
+      }
+      if (url.pathname.endsWith('/seller_stripe_test_provisioning')) {
+        const reservation = onboarding.reservations.get(url.searchParams.get('seller_id')?.slice(3));
+        return reply(reservation ? [reservation] : []);
+      }
+      if (url.pathname.endsWith('/rpc/reserve_seller_stripe_test_account')) {
+        const data = await body();
+        if (onboarding.mappings.has(data.p_seller)) return reply({ stripe_account: onboarding.mappings.get(data.p_seller) });
+        if (!onboarding.reservations.has(data.p_seller)) onboarding.reservations.set(data.p_seller, { id: randomUUID(), may_create: true });
+        return reply(onboarding.reservations.get(data.p_seller));
+      }
+      if (url.pathname.endsWith('/rpc/bind_seller_stripe_test_account')) {
+        if (onboarding.bindError) return reply({ message: 'Synthetic mapping failure' }, 503);
+        const data = await body();
+        const existing = onboarding.mappings.get(data.p_seller);
+        if (onboarding.reservations.get(data.p_seller)?.id !== data.p_reservation || (existing && existing !== data.p_account)) return reply({ message: 'Invalid reservation' }, 400);
+        onboarding.mappings.set(data.p_seller, data.p_account);
+        return reply(data.p_account);
+      }
+    }
     if (url.pathname.endsWith('/seller_stripe_test_accounts')) return reply(stripeMapped ? [{ seller_id: accountB, stripe_account: stripeAccount }] : []);
     if (url.pathname.endsWith('/stripe_checkout_attempts')) return reply(stripeAttempt ? [stripeAttempt] : []);
     if (url.pathname.endsWith('/stripe_payment_events')) {

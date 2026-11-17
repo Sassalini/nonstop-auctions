@@ -137,6 +137,7 @@ export type Database = {
       fulfilment_orders: TableDefinition<FulfilmentOrder, never, never>;
       listing_fulfilment_terms: TableDefinition<{ lot_id: string; details: FulfilmentTerms }, never, never>;
       seller_stripe_test_accounts: TableDefinition<{ seller_id: string; stripe_account: string }, never, never>;
+      seller_stripe_test_provisioning: TableDefinition<{ seller_id: string; id: string; platform_account: string; created_at: string; stripe_account: string | null }, never, never>;
       stripe_checkout_attempts: TableDefinition<StripeCheckoutAttempt, never, never>;
       stripe_payment_events: TableDefinition<{ id: string; attempt_id: string; kind: string; processed_at: string }, never, never>;
       conversations: TableDefinition<Conversation, never, never>;
@@ -304,6 +305,8 @@ export type Database = {
     };
     Views: Record<string, never>;
     Functions: {
+      reserve_seller_stripe_test_account: { Args: { p_seller: string; p_platform: string }; Returns: Json };
+      bind_seller_stripe_test_account: { Args: { p_seller: string; p_reservation: string; p_platform: string; p_account: string }; Returns: string };
       unread_message_count: { Args: Record<string, never>; Returns: number };
       transaction_action: { Args: { action: string; payload?: Json }; Returns: Json };
       completed_auctions_page_with_reference: { Args: { p_mode: "buyer" | "seller"; p_limit?: number; p_offset?: number; p_lot_id?: string }; Returns: { lot_id: string; title: string; sale_price: number; completed_at: string; seller_name: string; buyer_name: string; is_buyer: boolean; image_url: string | null; storage_path: string | null; lot_reference: number }[] };

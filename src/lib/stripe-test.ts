@@ -3,6 +3,7 @@ import Stripe from "stripe";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "./supabase/types";
 import type { StripeCheckoutAttempt } from "./transactions";
+export { sellerCanAcceptTestPayments } from "./seller-payment-status";
 
 export function stripeTestConfig() {
   const secret = process.env.STRIPE_TEST_SECRET_KEY;
@@ -70,11 +71,6 @@ export function testCheckoutCreatedAt(attempt: Pick<StripeCheckoutAttempt, "crea
 
 export function canRetryTestCheckoutCreation(attempt: Pick<StripeCheckoutAttempt, "created_at">) {
   return Date.now() / 1000 <= testCheckoutCreatedAt(attempt) + 60 * 60;
-}
-
-export function sellerCanAcceptTestPayments(account: Stripe.Account) {
-  return account.country === "GB" && account.details_submitted && account.charges_enabled && account.payouts_enabled &&
-    account.capabilities?.card_payments === "active" && !account.requirements?.disabled_reason;
 }
 
 export function verifyTestCheckout(session: Stripe.Checkout.Session, attempt: Pick<StripeCheckoutAttempt, "id" | "session_id" | "total_minor">) {
