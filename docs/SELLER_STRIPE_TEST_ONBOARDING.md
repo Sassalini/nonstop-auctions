@@ -1,5 +1,10 @@
 # Automatic seller Stripe sandbox onboarding
 
+For the reconciliation investigation and migration 020 follow-up, see
+[Seller Stripe reconciliation](SELLER_STRIPE_RECONCILIATION.md). It supersedes the
+retry and mapping-verification behavior below: continuations recover before
+replaying creation, and existing automatic mappings are verified before resuming.
+
 ## Account and charge model
 
 The existing buyer Checkout creates direct card charges in the seller's connected-account scope (`stripeAccount`); it does not use destination charges or platform transfers. Automatic provisioning uses the existing Accounts v1 API and explicit Standard-equivalent controller properties:
@@ -33,7 +38,7 @@ Only the server action provisions, after Supabase `auth.getUser()` verifies the 
 
 Do not change the v1 creation parameters or key format for existing intents in a future release. Introduce an explicitly versioned path if changing account models.
 
-Stripe v1 can prune idempotency keys after 24 hours. The database allows create/retry calls only during the first **one hour** of the intent, leaving a conservative margin. A timeout, lost Stripe response, or cached provider failure triggers a search of connected accounts for the intent metadata `nonstop_test_provisioning`. A failed binding can retry the same create key during that window. Outside it, only recovery is allowed; the system never treats a missing search result as permission to create another account. [Stripe idempotency retention](https://docs.stripe.com/api/idempotent_requests).
+Stripe v1 can prune idempotency keys after 24 hours. The database allows create/retry calls only during the first **one hour** of the intent, leaving a conservative margin. A continuation first searches connected accounts for the intent metadata `nonstop_test_provisioning`, including after a failed binding. It reuses a uniquely verified account without another create request. If a complete scan finds nothing within the window, it rechecks database eligibility before replaying the original key and unchanged parameters. A timeout, lost Stripe response, or cached provider failure also triggers recovery. Outside the window, only recovery is allowed; the system never treats a missing search result as permission to create another account. Migration 020 distinguishes the sole new-reservation request, which can skip the initial recovery scan. [Stripe idempotency retention](https://docs.stripe.com/api/idempotent_requests).
 
 Recovery scans up to ten pages of 100 connected accounts. It verifies account country/controller properties and rejects ambiguous matches or incomplete scans. If one match is found in a complete scan, it binds that account. If the account cannot be confirmed, the seller receives a reconciliation message and no new account is created. Missing/inaccessible existing mapped accounts also remain mapped and do not trigger replacement.
 

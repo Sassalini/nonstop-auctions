@@ -3,10 +3,15 @@ import type Stripe from "stripe";
 import { stripeTestClients, testSellerAccount } from "./stripe-test";
 
 type Clients = ReturnType<typeof stripeTestClients>;
+type Reservation = { id?: string; stripe_account?: string; may_create?: boolean; new_reservation?: boolean };
+
+type RecoveryReason = "platform_mismatch" | "invalid_reservation" | "account_mismatch" |
+  "ambiguous_accounts" | "incomplete_scan" | "expired_unresolved";
 
 export class SellerSetupRecoveryRequired extends Error {
-  constructor() {
-    super("Your seller payment setup needs reconciliation. Contact support; another account will not be created.");
+  constructor(readonly reason: RecoveryReason = "invalid_reservation") {
+    super(`Your seller payment setup needs reconciliation. Contact support; another account will not be created. Support code: ${reason}.`);
+    this.name = "SellerSetupRecoveryRequired";
   }
 }
 
@@ -19,7 +24,34 @@ export async function requireStripeSandbox(stripe: Clients["stripe"]) {
 function validateProvisionedAccount(account: Stripe.Account, reservationId: string) {
   if (account.country !== "GB" || account.metadata?.nonstop_test_provisioning !== reservationId ||
     account.controller?.fees?.payer !== "account" || account.controller?.losses?.payments !== "stripe" ||
-    account.controller?.stripe_dashboard?.type !== "full") throw new SellerSetupRecoveryRequired();
+    account.controller?.requirement_collection !== "stripe" ||
+    account.controller?.stripe_dashboard?.type !== "full") throw new SellerSetupRecoveryRequired("account_mismatch");
+  return account;
+}
+
+// Read-only: also used by the status page and expired-link refresh. A mapping
+// alone must not bypass ownership/platform checks for automatically made accounts.
+export async function readSellerTestAccount({ stripe, admin }: Clients, sellerId: string) {
+  const accountId = await testSellerAccount(admin, sellerId);
+  if (!accountId) return null;
+  const { data: intent, error } = await admin.from("seller_stripe_test_provisioning")
+    .select("id,platform_account,stripe_account").eq("seller_id", sellerId).maybeSingle();
+  if (error) throw error;
+  // Check platform identity first: a wrong sandbox often returns resource_missing
+  // for the connected account, which would otherwise hide the actionable cause.
+  if (intent && (await stripe.accounts.retrieve(null)).id !== intent.platform_account) {
+    throw new SellerSetupRecoveryRequired("platform_mismatch");
+  }
+  const account = await stripe.accounts.retrieve(accountId);
+  if (account.id !== accountId) throw new SellerSetupRecoveryRequired("account_mismatch");
+  if (intent) {
+    if (intent.stripe_account && intent.stripe_account !== accountId) throw new SellerSetupRecoveryRequired("account_mismatch");
+    validateProvisionedAccount(account, intent.id);
+  } else if (account.metadata?.nonstop_test_provisioning) {
+    // A generated account without this seller's intent cannot be treated as an
+    // operator mapping. Preserve the row and require an ownership investigation.
+    throw new SellerSetupRecoveryRequired("account_mismatch");
+  }
   return account;
 }
 
@@ -32,32 +64,56 @@ async function recoverAccount(stripe: Clients["stripe"], reservationId: string) 
     const accounts = await stripe.accounts.list({ limit: 100, ...(cursor ? { starting_after: cursor } : {}) });
     for (const account of accounts.data) {
       if (account.metadata?.nonstop_test_provisioning !== reservationId) continue;
-      if (match && match.id !== account.id) throw new SellerSetupRecoveryRequired();
+      if (match && match.id !== account.id) throw new SellerSetupRecoveryRequired("ambiguous_accounts");
       match = validateProvisionedAccount(account, reservationId);
     }
     if (!accounts.has_more) return match;
     cursor = accounts.data.at(-1)?.id;
     if (!cursor) break;
   }
-  throw new SellerSetupRecoveryRequired();
+  throw new SellerSetupRecoveryRequired("incomplete_scan");
 }
 
 export async function getOrCreateSellerTestAccount({ stripe, admin }: Clients, sellerId: string) {
   await requireStripeSandbox(stripe);
-  const existing = await testSellerAccount(admin, sellerId);
-  if (existing) return existing;
+  const clients = { stripe, admin };
+  const existing = await readSellerTestAccount(clients, sellerId);
+  if (existing) return existing.id;
   const platform = await stripe.accounts.retrieve(null);
   const { data, error } = await admin.rpc("reserve_seller_stripe_test_account", { p_seller: sellerId, p_platform: platform.id });
   if (error) {
-    if (error.message === "Seller setup requires reconciliation") throw new SellerSetupRecoveryRequired();
+    if (error.message === "Seller setup requires reconciliation") throw new SellerSetupRecoveryRequired("platform_mismatch");
     throw error;
   }
-  const reservation = data as { id?: string; stripe_account?: string; may_create?: boolean } | null;
-  if (reservation?.stripe_account) return reservation.stripe_account;
+  const reservation = data as Reservation | null;
+  if (reservation?.stripe_account) {
+    // Another request may have completed binding between our lookup and reserve.
+    const mapped = await readSellerTestAccount(clients, sellerId);
+    if (!mapped || mapped.id !== reservation.stripe_account) throw new SellerSetupRecoveryRequired("account_mismatch");
+    return mapped.id;
+  }
   if (!reservation?.id) throw new SellerSetupRecoveryRequired();
   const reservationId = reservation.id;
-  let account: Stripe.Account | undefined;
-  if (reservation.may_create === true) {
+  // Prefer recovery even within the retry window: a previous Worker may have
+  // created the account and died before binding. Never replay a known success.
+  // Migration 020 identifies the sole inserting request. Missing this flag
+  // (migration 019) safely falls back to recovery before any creation retry.
+  let account = reservation.new_reservation === true ? undefined : await recoverAccount(stripe, reservationId);
+  if (!account && reservation.may_create === true) {
+    // Refresh the database's decision after the potentially slow account scan.
+    // This reuses the same intent; it never renews its creation window.
+    const { data: retryData, error: retryError } = await admin.rpc("reserve_seller_stripe_test_account", { p_seller: sellerId, p_platform: platform.id });
+    if (retryError) {
+      if (retryError.message === "Seller setup requires reconciliation") throw new SellerSetupRecoveryRequired("platform_mismatch");
+      throw retryError;
+    }
+    const retry = retryData as Reservation | null;
+    if (retry?.stripe_account) {
+      const mapped = await readSellerTestAccount(clients, sellerId);
+      if (!mapped || mapped.id !== retry.stripe_account) throw new SellerSetupRecoveryRequired("account_mismatch");
+      return mapped.id;
+    }
+    if (retry?.id !== reservationId || retry?.may_create !== true) throw new SellerSetupRecoveryRequired("expired_unresolved");
     try {
       // These v1 parameters must remain immutable for this reservation/version.
       // Full Dashboard / seller fees / Stripe losses supports existing direct
@@ -75,10 +131,8 @@ export async function getOrCreateSellerTestAccount({ stripe, admin }: Clients, s
       account = await recoverAccount(stripe, reservationId);
       if (!account) throw new Error("Stripe setup could not be confirmed");
     }
-  } else {
-    account = await recoverAccount(stripe, reservationId);
   }
-  if (!account) throw new SellerSetupRecoveryRequired();
+  if (!account) throw new SellerSetupRecoveryRequired("expired_unresolved");
   validateProvisionedAccount(account, reservationId);
   const { data: bound, error: bindError } = await admin.rpc("bind_seller_stripe_test_account", {
     p_seller: sellerId, p_reservation: reservationId, p_platform: platform.id, p_account: account.id,

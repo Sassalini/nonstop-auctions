@@ -17,6 +17,15 @@ before(async () => {
   await db.exec(await readFile(new URL('../supabase/migrations/019_seller_stripe_test_provisioning.sql', import.meta.url), 'utf8'));
   assert.deepEqual((await db.query('select * from public.seller_stripe_test_accounts')).rows, before);
   assert.deepEqual((await db.query('select * from public.fulfilment_orders')).rows, orders);
+  // Exercise the forward migration against an already pending reservation.
+  const pendingSeller = randomUUID();
+  await db.query('insert into auth.users(id,email_confirmed_at) values ($1,now())', [pendingSeller]);
+  await db.query('select public.reserve_seller_stripe_test_account($1,$2)', [pendingSeller, platform]);
+  const intents = (await db.query('select * from public.seller_stripe_test_provisioning')).rows;
+  await db.exec(await readFile(new URL('../supabase/migrations/020_seller_stripe_reservation_origin.sql', import.meta.url), 'utf8'));
+  assert.deepEqual((await db.query('select * from public.seller_stripe_test_provisioning')).rows, intents);
+  assert.deepEqual((await db.query('select * from public.seller_stripe_test_accounts')).rows, before);
+  assert.deepEqual((await db.query('select * from public.fulfilment_orders')).rows, orders);
 });
 after(async () => db?.close());
 
@@ -49,7 +58,8 @@ async function fixture() {
   const stripe = {
     balance: { retrieve: async () => ({ livemode: mode }) },
     accounts: {
-      retrieve: async id => id ? accounts.get(id) : { id: platform },
+      retrieve: async id => id === 'acct_existingFixture' ? { id, country: 'GB', metadata: {} }
+        : id ? accounts.get(id) : { id: platform },
       async create(params, options) {
         createRequests++;
         assert.equal(params.country, 'GB');
@@ -115,6 +125,7 @@ test('failed mapping write retries the same account and creation parameters', as
   const id = await service.getOrCreateSellerTestAccount(f.clients, f.seller);
   assert.equal(id, [...f.accounts.keys()][0]);
   assert.equal(f.counts().creations, 1);
+  assert.equal(f.counts().createRequests, 1, 'Recover before replaying account creation');
 });
 
 test('after idempotency retention, recovery finds the orphan without another create', async () => {
@@ -262,4 +273,157 @@ test('service RPCs preserve reservation scope, refuse replacements, and permit s
   await f.clients.admin.rpc('reserve_seller_stripe_test_account', { p_seller: f.seller, p_platform: platform });
   assert.ok((await f.clients.admin.rpc('reserve_seller_stripe_test_account', { p_seller: f.seller, p_platform: 'acct_otherPlatform' })).error);
   assert.ok((await f.clients.admin.rpc('bind_seller_stripe_test_account', { p_seller: f.seller, p_reservation: randomUUID(), p_platform: platform, p_account: 'acct_wrongIntent' })).error);
+});
+
+test('expired empty reservations explain the block and preserve the original intent', async () => {
+  const f = await fixture();
+  const { data: intent } = await f.clients.admin.rpc('reserve_seller_stripe_test_account', { p_seller: f.seller, p_platform: platform });
+  await f.expire();
+  await assert.rejects(service.getOrCreateSellerTestAccount(f.clients, f.seller), error =>
+    error.reason === 'expired_unresolved' && error.message.includes('Support code: expired_unresolved'));
+  assert.equal(f.counts().createRequests, 0);
+  assert.equal((await db.query('select id from public.seller_stripe_test_provisioning where seller_id=$1', [f.seller])).rows[0].id, intent.id);
+});
+
+test('a Worker interruption after creation recovers without another POST inside the retry window', async () => {
+  const f = await fixture();
+  f.failures({ bind: true });
+  await assert.rejects(service.getOrCreateSellerTestAccount(f.clients, f.seller));
+  const original = [...f.accounts.keys()][0];
+  // Simulate losing the API idempotency cache: recovery must still prefer the
+  // existing account's durable metadata, even before the local window expires.
+  f.keys.clear(); f.failures({});
+  assert.equal(await service.getOrCreateSellerTestAccount(f.clients, f.seller), original);
+  assert.equal(f.counts().createRequests, 1);
+});
+
+test('a scan failure or incomplete scan cannot authorize another create', async () => {
+  const f = await fixture();
+  await f.clients.admin.rpc('reserve_seller_stripe_test_account', { p_seller: f.seller, p_platform: platform });
+  f.clients.stripe.accounts.list = async () => { throw new Error('Synthetic read timeout'); };
+  await assert.rejects(service.getOrCreateSellerTestAccount(f.clients, f.seller), /Synthetic read timeout/);
+  assert.equal(f.counts().createRequests, 0);
+  f.clients.stripe.accounts.list = async () => ({ data: [], has_more: true });
+  await assert.rejects(service.getOrCreateSellerTestAccount(f.clients, f.seller), error => error.reason === 'incomplete_scan');
+  assert.equal(f.counts().createRequests, 0);
+});
+
+test('expiration during a slow recovery scan rechecks the database before any create', async () => {
+  const f = await fixture();
+  await f.clients.admin.rpc('reserve_seller_stripe_test_account', { p_seller: f.seller, p_platform: platform });
+  f.clients.stripe.accounts.list = async () => { await f.expire(); return { data: [], has_more: false }; };
+  await assert.rejects(service.getOrCreateSellerTestAccount(f.clients, f.seller), error => error.reason === 'expired_unresolved');
+  assert.equal(f.counts().createRequests, 0);
+});
+
+test('safe retry after an API timeout uses the original idempotency key and exact parameters', async () => {
+  const f = await fixture(); f.failures({ create: true });
+  await assert.rejects(service.getOrCreateSellerTestAccount(f.clients, f.seller));
+  const intent = (await db.query('select id from public.seller_stripe_test_provisioning where seller_id=$1', [f.seller])).rows[0].id;
+  f.failures({});
+  const id = await service.getOrCreateSellerTestAccount(f.clients, f.seller);
+  assert.equal(f.keys.get(`nonstop-test-seller-v1-${intent}`).account.id, id);
+  assert.equal(f.counts().creations, 1);
+});
+
+test('owned mappings are read-only verified; tampered metadata or platforms stay blocked', async () => {
+  const f = await fixture();
+  const id = await service.getOrCreateSellerTestAccount(f.clients, f.seller);
+  const original = structuredClone(f.accounts.get(id));
+  assert.equal((await service.readSellerTestAccount(f.clients, f.seller)).id, id);
+  for (const overrides of [
+    { metadata: { nonstop_test_provisioning: randomUUID() } },
+    { country: 'US' },
+    { controller: { ...original.controller, requirement_collection: 'application' } },
+  ]) {
+    f.accounts.set(id, { ...original, ...overrides });
+    await assert.rejects(service.getOrCreateSellerTestAccount(f.clients, f.seller), error => error.reason === 'account_mismatch');
+  }
+  f.accounts.set(id, original);
+  const retrieve = f.clients.stripe.accounts.retrieve;
+  f.clients.stripe.accounts.retrieve = async id => id ? retrieve(id) : { id: 'acct_wrongPlatform' };
+  await assert.rejects(service.readSellerTestAccount(f.clients, f.seller), error => error.reason === 'platform_mismatch');
+  assert.equal(f.counts().createRequests, 1);
+  assert.equal((await db.query('select stripe_account from public.seller_stripe_test_accounts where seller_id=$1', [f.seller])).rows[0].stripe_account, id);
+});
+
+test('a generated account mapped to a different seller cannot be resumed as a legacy mapping', async () => {
+  const f = await fixture();
+  const id = await service.getOrCreateSellerTestAccount(f.clients, f.seller);
+  const other = randomUUID();
+  await db.query('insert into auth.users(id,email_confirmed_at) values ($1,now())', [other]);
+  // Synthetic operator corruption; browser/service roles cannot write mappings.
+  await db.query('update public.seller_stripe_test_accounts set seller_id=$1 where seller_id=$2', [other, f.seller]);
+  await assert.rejects(service.getOrCreateSellerTestAccount(f.clients, other), error => error.reason === 'account_mismatch');
+  assert.equal(f.counts().creations, 1);
+  assert.equal((await db.query('select stripe_account from public.seller_stripe_test_accounts where seller_id=$1', [other])).rows[0].stripe_account, id);
+});
+
+test('recovery refuses incorrect account metadata/controller without binding or replacing it', async () => {
+  const f = await fixture(); f.failures({ bind: true });
+  await assert.rejects(service.getOrCreateSellerTestAccount(f.clients, f.seller));
+  f.failures({});
+  const account = [...f.accounts.values()][0];
+  account.controller.fees.payer = 'application';
+  await assert.rejects(service.getOrCreateSellerTestAccount(f.clients, f.seller), error => error.reason === 'account_mismatch');
+  assert.equal(f.counts().createRequests, 1);
+  assert.equal((await db.query('select count(*) from public.seller_stripe_test_accounts where seller_id=$1', [f.seller])).rows[0].count, 0);
+});
+
+test('only the inserting request is new; fresh sellers do not need a platform-wide recovery scan', async () => {
+  const f = await fixture();
+  const args = { p_seller: f.seller, p_platform: platform };
+  const first = (await f.clients.admin.rpc('reserve_seller_stripe_test_account', args)).data;
+  const second = (await f.clients.admin.rpc('reserve_seller_stripe_test_account', args)).data;
+  assert.equal(first.new_reservation, true);
+  assert.equal(second.new_reservation, false);
+  assert.equal(first.id, second.id);
+  const fresh = await fixture();
+  fresh.clients.stripe.accounts.list = async () => { throw new Error('Unnecessary recovery scan'); };
+  assert.ok(await service.getOrCreateSellerTestAccount(fresh.clients, fresh.seller));
+});
+
+test('migration 019 responses without the origin flag safely recover before replay', async () => {
+  const f = await fixture();
+  const rpc = f.clients.admin.rpc;
+  f.clients.admin.rpc = async (name, args) => {
+    const result = await rpc(name, args);
+    if (name === 'reserve_seller_stripe_test_account' && result.data) delete result.data.new_reservation;
+    return result;
+  };
+  f.failures({ bind: true });
+  await assert.rejects(service.getOrCreateSellerTestAccount(f.clients, f.seller));
+  f.failures({});
+  assert.equal(await service.getOrCreateSellerTestAccount(f.clients, f.seller), [...f.accounts.keys()][0]);
+  assert.equal(f.counts().createRequests, 1);
+});
+
+test('operator inspection SQL is read-only and distinguishes unknown, expired and mapped state', async () => {
+  const f = await fixture();
+  const sql = (await readFile(new URL('../supabase/operations/inspect_seller_stripe_onboarding.sql', import.meta.url), 'utf8'))
+    .replace('00000000-0000-0000-0000-000000000000', f.seller);
+  async function inspect(expected) {
+    const before = (await db.query('select * from public.seller_stripe_test_provisioning order by seller_id')).rows;
+    const mappings = (await db.query('select * from public.seller_stripe_test_accounts order by seller_id')).rows;
+    const results = await db.exec(sql);
+    assert.equal(results.flatMap(result => result.rows).find(row => row.database_observation)?.database_observation, expected);
+    assert.deepEqual((await db.query('select * from public.seller_stripe_test_provisioning order by seller_id')).rows, before);
+    assert.deepEqual((await db.query('select * from public.seller_stripe_test_accounts order by seller_id')).rows, mappings);
+  }
+  await inspect('NO_MAPPING_OR_INTENT');
+  f.failures({ bind: true });
+  await assert.rejects(service.getOrCreateSellerTestAccount(f.clients, f.seller));
+  await inspect('PENDING_OUTCOME_UNKNOWN');
+  await f.expire();
+  await inspect('EXPIRED_OUTCOME_UNKNOWN');
+  f.failures({});
+  await service.getOrCreateSellerTestAccount(f.clients, f.seller);
+  await inspect('MAPPED_VERIFY_STRIPE');
+});
+
+test('missing reservation data cannot authorize a provisioning request', async () => {
+  const f = await fixture();
+  f.clients.admin.rpc = async () => ({ data: {}, error: null });
+  await assert.rejects(service.getOrCreateSellerTestAccount(f.clients, f.seller), error => error.reason === 'invalid_reservation');
+  assert.equal(f.counts().createRequests, 0);
 });

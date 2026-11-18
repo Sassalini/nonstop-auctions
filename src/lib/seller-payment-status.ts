@@ -10,7 +10,7 @@ export function sellerCanAcceptTestPayments(account: Stripe.Account) {
 
 export function sellerPaymentStatus(account: Stripe.Account | null, provisioning = false) {
   if (!account) return provisioning
-    ? { title: "Setup in progress", description: "Continue setup to resume your sandbox account safely.", canOnboard: true }
+    ? { title: "Setup in progress", description: "A setup request is saved. Continue to check and resume it safely.", canOnboard: true }
     : { title: "Not set up", description: "Set up a Stripe sandbox account to receive test payments for your auctions.", canOnboard: true };
   const requirements = account.requirements;
   const reason = requirements?.disabled_reason;

@@ -19,6 +19,7 @@ function fixture({ user = { id: 'authenticated-seller' }, enabled = true, failur
     '@/lib/seller-stripe-onboarding': {
       SellerSetupRecoveryRequired,
       requireStripeSandbox: async () => {},
+      readSellerTestAccount: async () => ({ id: 'acct_authenticatedSeller' }),
       getOrCreateSellerTestAccount: async (_clients, id) => {
         provisions++; seller = id;
         if (failure) throw new Error('Synthetic provider failure with confidential details');

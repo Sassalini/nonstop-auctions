@@ -138,3 +138,56 @@ test('another signed-in account cannot view or resume an existing seller mapping
   expect(state.links).toBe(0);
   expect(state.creations).toBe(0);
 });
+
+test('interrupted provisioning recovers the original account after the retry window', async ({ page, request }) => {
+  await signIn(page);
+  await request.post(`${fixture}/state`, { data: { bindError: true } });
+  await page.getByRole('button', { name: 'Set Up Seller Payments' }).click();
+  await expect(page.locator('p[role="alert"]')).toContainText('Could not open Stripe onboarding');
+  const interrupted = await (await request.get(`${fixture}/onboarding`)).json();
+  expect(interrupted.creations).toBe(1);
+  expect(interrupted.mappings).toHaveLength(0);
+  await request.post(`${fixture}/state`, { data: { bindError: false, expireReservation: true } });
+  await page.reload();
+  await page.getByRole('button', { name: 'Continue Stripe onboarding' }).click();
+  await expect(page.getByRole('heading', { name: 'Stripe onboarding fixture' })).toBeVisible();
+  const recovered = await (await request.get(`${fixture}/onboarding`)).json();
+  expect(recovered.creations).toBe(1);
+  expect(recovered.createRequests).toBe(interrupted.createRequests);
+  expect(recovered.mappings).toEqual([['00000000-0000-0000-0000-000000000103', 'acct_onboarding1']]);
+});
+
+test('expired unresolved provisioning reports its support code without making another account request', async ({ page, request }) => {
+  await signIn(page);
+  await request.post(`${fixture}/state`, { data: { createError: true } });
+  await page.getByRole('button', { name: 'Set Up Seller Payments' }).click();
+  await expect(page.locator('p[role="alert"]')).toContainText('Could not open Stripe onboarding');
+  const failed = await (await request.get(`${fixture}/onboarding`)).json();
+  await request.post(`${fixture}/state`, { data: { createError: false, expireReservation: true } });
+  await page.reload();
+  await expect(page.getByText('A setup request is saved. Continue to check and resume it safely.')).toBeVisible();
+  await page.getByRole('button', { name: 'Continue Stripe onboarding' }).click();
+  await expect(page.locator('p[role="alert"]')).toContainText('Support code: expired_unresolved');
+  const blocked = await (await request.get(`${fixture}/onboarding`)).json();
+  expect(blocked.creations).toBe(0);
+  expect(blocked.createRequests).toBe(failed.createRequests);
+  expect(blocked.links).toBe(0);
+});
+
+test('ownership inconsistency blocks status and expired-link refresh without changing mappings', async ({ page, request }) => {
+  await signIn(page);
+  await page.getByRole('button', { name: 'Set Up Seller Payments' }).click();
+  await expect(page.getByRole('heading', { name: 'Stripe onboarding fixture' })).toBeVisible();
+  const original = await (await request.get(`${fixture}/onboarding`)).json();
+  await request.post(`${fixture}/state`, { data: { tamperOwnership: true } });
+  await page.goto(payments);
+  await expect(page.getByRole('heading', { name: 'Setup needs review', exact: true })).toBeVisible();
+  await expect(page.getByText(/Support code: account_mismatch/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Continue Stripe onboarding' })).toHaveCount(0);
+  const refresh = await page.request.get(`${payments}/refresh`, { maxRedirects: 0 });
+  expect(refresh.headers().location).toContain('onboarding=retry');
+  const blocked = await (await request.get(`${fixture}/onboarding`)).json();
+  expect(blocked.mappings).toEqual(original.mappings);
+  expect(blocked.createRequests).toBe(original.createRequests);
+  expect(blocked.links).toBe(original.links);
+});

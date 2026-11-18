@@ -1,5 +1,10 @@
 # Seller Payments self-service review
 
+This records the earlier self-service change. The subsequent
+[reconciliation investigation](SELLER_STRIPE_RECONCILIATION.md) prepares migration
+020, additional mapping verification, and recovery before creation retries. Its
+current release/recovery instructions supersede the historical findings below.
+
 ## Repository findings
 
 Automatic seller provisioning was already present before this change. `openSellerTestOnboarding()` authenticates with Supabase `auth.getUser()` and calls `getOrCreateSellerTestAccount()` using only the verified session's seller ID. It reuses `seller_stripe_test_accounts`, including operator-created mappings. No seller or connected-account identifier is accepted from the browser.

@@ -3,8 +3,8 @@ import { InteriorShell } from "@/components/InteriorShell";
 import { AccountNavigation } from "@/components/AccountNavigation";
 import { SellerOnboardingButton } from "@/components/SellerOnboardingButton";
 import { transactionAccount } from "@/lib/transaction-account";
-import { stripeTestClients, stripeTestConfig, stripeTestOrigin, testSellerAccount } from "@/lib/stripe-test";
-import { requireStripeSandbox } from "@/lib/seller-stripe-onboarding";
+import { stripeTestClients, stripeTestConfig, stripeTestOrigin } from "@/lib/stripe-test";
+import { readSellerTestAccount, requireStripeSandbox, SellerSetupRecoveryRequired } from "@/lib/seller-stripe-onboarding";
 import { sellerPaymentStatus } from "@/lib/seller-payment-status";
 
 export const dynamic = "force-dynamic";
@@ -19,18 +19,20 @@ export default async function SellerPaymentsPage({ searchParams }: { searchParam
     try {
       const { stripe, admin } = stripeTestClients(config);
       await requireStripeSandbox(stripe);
-      const accountId = await testSellerAccount(admin, user.id);
-      if (accountId) {
+      const account = await readSellerTestAccount({ stripe, admin }, user.id);
+      if (account) {
         // A return URL is never evidence of completion. Read Stripe every time.
-        status = sellerPaymentStatus(await stripe.accounts.retrieve(accountId));
+        status = sellerPaymentStatus(account);
       } else {
         const { data, error } = await admin.from("seller_stripe_test_provisioning").select("id").eq("seller_id", user.id).maybeSingle();
         if (error) throw error;
         status = sellerPaymentStatus(null, Boolean(data));
         initial = !data;
       }
-    } catch {
-      status = { title: "Status unavailable", description: "Stripe account status is temporarily unavailable. Refresh this page to try again. Your existing setup will be reused.", canOnboard: false };
+    } catch (error) {
+      status = error instanceof SellerSetupRecoveryRequired
+        ? { title: "Setup needs review", description: error.message, canOnboard: false }
+        : { title: "Status unavailable", description: "Stripe account status is temporarily unavailable. Refresh this page to try again. Your existing setup will be reused.", canOnboard: false };
     }
   }
   return <InteriorShell eyebrow="My Account" title="Seller Payments" description="Set up and manage payments for the items you sell.">

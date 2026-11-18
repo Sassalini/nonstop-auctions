@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { stripeTestClients, stripeTestConfig, stripeTestOrigin, testSellerAccount } from "@/lib/stripe-test";
-import { requireStripeSandbox, sellerTestAccountLink } from "@/lib/seller-stripe-onboarding";
+import { stripeTestClients, stripeTestConfig, stripeTestOrigin } from "@/lib/stripe-test";
+import { readSellerTestAccount, requireStripeSandbox, sellerTestAccountLink } from "@/lib/seller-stripe-onboarding";
 
 export const dynamic = "force-dynamic";
 
@@ -16,9 +16,9 @@ export async function GET() {
     try {
       const { stripe, admin } = stripeTestClients(config);
       await requireStripeSandbox(stripe);
-      const accountId = await testSellerAccount(admin, user.id);
+      const account = await readSellerTestAccount({ stripe, admin }, user.id);
       // Refresh only an existing mapping. GET requests never provision accounts.
-      if (accountId) url = await sellerTestAccountLink(stripe, origin, accountId);
+      if (account) url = await sellerTestAccountLink(stripe, origin, account.id);
     } catch { /* Show a safe retry message without provider details. */ }
   }
   redirect(url);
